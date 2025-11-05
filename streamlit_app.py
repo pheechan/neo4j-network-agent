@@ -485,7 +485,43 @@ OPTIONS {indexConfig: {
 					else:
 						st.warning("⚠️ No nodes have embeddings! Click 'Generate Embeddings' above.")
 					
-					# Check for Santisook
+					# Check for nodes with embedding_text
+					st.markdown("**Nodes with embedding_text:**")
+					result = session.run("""
+						MATCH (n)
+						WHERE n.embedding_text IS NOT NULL
+						RETURN labels(n)[0] as label, count(n) as count
+						ORDER BY count DESC
+						LIMIT 10
+					""")
+					nodes_with_text = list(result)
+					if nodes_with_text:
+						for record in nodes_with_text:
+							st.caption(f"📝 {record['label']}: {record['count']} nodes")
+					else:
+						st.warning("⚠️ No nodes have embedding_text! Click 'Generate Embeddings' to add it.")
+					
+					# Check for Santisook label specifically
+					st.markdown("**Santisook Label Nodes:**")
+					result = session.run("""
+						MATCH (n:Santisook)
+						RETURN n.Stelligence as stelligence,
+						       n.embedding IS NOT NULL as has_embedding,
+						       n.embedding_text as embedding_text,
+						       keys(n) as properties
+						LIMIT 3
+					""")
+					santisook_label = list(result)
+					if santisook_label:
+						for record in santisook_label:
+							emb = "✅" if record['has_embedding'] else "❌"
+							txt = "📝" if record['embedding_text'] else "❌"
+							props = ', '.join([p for p in record['properties'] if p not in ['embedding', 'embedding_text']])
+							st.caption(f"{emb} Emb | {txt} Text | Stelligence: {record['stelligence']} | Props: {props}")
+					else:
+						st.caption("No Santisook label nodes found")
+					
+					# Test Search
 					st.markdown("**Test Search (Santisook):**")
 					result = session.run("""
 						MATCH (n)
