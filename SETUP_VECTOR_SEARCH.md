@@ -21,6 +21,17 @@
 
 Go to **Neo4j Browser** → https://console.neo4j.io
 
+### IMPORTANT: Delete old indexes first (if you have dimension mismatch errors)
+
+If you see this error: `vector index dimensions do not match. Embedding function dimension: 384 Vector index dimension: 1536`
+
+Run this first to delete the old OpenAI-based index:
+```cypher
+DROP INDEX default_index IF EXISTS;
+```
+
+### Then create ALL vector indexes at once:
+
 Run this Cypher query to create ALL vector indexes at once:
 
 ```cypher

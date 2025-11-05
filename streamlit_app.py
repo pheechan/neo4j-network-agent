@@ -43,11 +43,12 @@ OPENROUTER_API_BASE = get_config("OPENROUTER_API_BASE", get_config("OPENAI_API_B
 OPENROUTER_MODEL = get_config("OPENROUTER_MODEL", "deepseek/deepseek-chat")
 
 # Vector/RAG configuration (optional, used by KG/VectorRAG.query_vector_rag)
-VECTOR_INDEX_NAME = get_config("VECTOR_INDEX_NAME", "default_index")
-VECTOR_NODE_LABEL = get_config("VECTOR_NODE_LABEL", "Document")
+# Use person_vector_index as default since Person is likely the most queried label
+VECTOR_INDEX_NAME = get_config("VECTOR_INDEX_NAME", "person_vector_index")
+VECTOR_NODE_LABEL = get_config("VECTOR_NODE_LABEL", "Person")
 VECTOR_SOURCE_PROPERTY = get_config("VECTOR_SOURCE_PROPERTY", "text")
 VECTOR_EMBEDDING_PROPERTY = get_config("VECTOR_EMBEDDING_PROPERTY", "embedding")
-VECTOR_TOP_K = int(get_config("VECTOR_TOP_K", "3"))
+VECTOR_TOP_K = int(get_config("VECTOR_TOP_K", "5"))
 
 # Try to import the project's vector RAG helper (LangChain + Neo4jVector)
 # Now supports both HuggingFace (free) and OpenAI embeddings
@@ -289,7 +290,7 @@ st.set_page_config(
 	initial_sidebar_state="collapsed"  # Start with sidebar hidden
 )
 
-# Custom CSS for ChatGPT-like styling
+# Custom CSS for ChatGPT-like styling with dark sidebar
 st.markdown("""
 <style>
 	/* Hide Streamlit branding */
@@ -308,9 +309,28 @@ st.markdown("""
 		border-radius: 0.5rem;
 	}
 	
-	/* Sidebar styling */
+	/* Dark sidebar styling */
 	[data-testid="stSidebar"] {
-		background-color: #f7f7f8;
+		background-color: #202123;
+	}
+	
+	[data-testid="stSidebar"] * {
+		color: #ececf1 !important;
+	}
+	
+	[data-testid="stSidebar"] button {
+		background-color: #2d2d30;
+		border: 1px solid #4d4d4f;
+		color: #ececf1 !important;
+	}
+	
+	[data-testid="stSidebar"] button:hover {
+		background-color: #3d3d40;
+		border-color: #6d6d6f;
+	}
+	
+	[data-testid="stSidebar"] hr {
+		border-color: #4d4d4f;
 	}
 	
 	/* Chat input styling */
@@ -436,8 +456,11 @@ if user_input and user_input.strip():
 	# query neo4j for context and call model
 	with st.chat_message("assistant", avatar="🤖"):
 		with st.spinner("กำลังค้นหาข้อมูล... (Searching knowledge graph...)"):
-			# prefer vector RAG retrieval (if available), otherwise fall back to simple node search
+			# Initialize variables at the start
 			ctx = ""
+			nodes = []
+			
+			# prefer vector RAG retrieval (if available), otherwise fall back to simple node search
 			if query_vector_rag is not None:
 				try:
 					docs_and_scores = query_vector_rag(
