@@ -46,7 +46,8 @@ OPENROUTER_MODEL = get_config("OPENROUTER_MODEL", "deepseek/deepseek-chat")
 # Use person_vector_index as default since Person is likely the most queried label
 VECTOR_INDEX_NAME = get_config("VECTOR_INDEX_NAME", "person_vector_index")
 VECTOR_NODE_LABEL = get_config("VECTOR_NODE_LABEL", "Person")
-VECTOR_SOURCE_PROPERTY = get_config("VECTOR_SOURCE_PROPERTY", "text")
+# Use embedding_text which contains the formatted text used to generate embeddings
+VECTOR_SOURCE_PROPERTY = get_config("VECTOR_SOURCE_PROPERTY", "embedding_text")
 VECTOR_EMBEDDING_PROPERTY = get_config("VECTOR_EMBEDDING_PROPERTY", "embedding")
 VECTOR_TOP_K = int(get_config("VECTOR_TOP_K", "5"))
 
