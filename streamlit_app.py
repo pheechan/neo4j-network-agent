@@ -57,11 +57,96 @@ except Exception as e:
 	query_vector_rag = None
 	print(f"Vector RAG not available: {e}")
 
+# Try to import HuggingFace embeddings for generating embeddings
+try:
+	from langchain_huggingface import HuggingFaceEmbeddings
+	EMBEDDINGS_AVAILABLE = True
+except Exception as e:
+	HuggingFaceEmbeddings = None
+	EMBEDDINGS_AVAILABLE = False
+	print(f"HuggingFace embeddings not available: {e}")
+
 
 def get_driver():
 	if GraphDatabase is None:
 		raise RuntimeError("neo4j driver missing. Install with: python -m pip install neo4j")
 	return GraphDatabase.driver(NEO4J_URI, auth=(NEO4J_USER, NEO4J_PWD))
+
+
+@st.cache_resource
+def get_embeddings_model():
+	"""Load HuggingFace embeddings model (cached)"""
+	if not EMBEDDINGS_AVAILABLE:
+		return None
+	return HuggingFaceEmbeddings(
+		model_name="sentence-transformers/paraphrase-multilingual-MiniLM-L12-v2"
+	)
+
+
+def generate_embeddings_for_nodes(driver, limit=50):
+	"""
+	Generate embeddings for nodes that don't have them yet.
+	Returns (success_count, total_processed, error_messages)
+	"""
+	embeddings_model = get_embeddings_model()
+	if embeddings_model is None:
+		return 0, 0, ["HuggingFace embeddings not available"]
+	
+	errors = []
+	success_count = 0
+	total_processed = 0
+	
+	# Get all labels
+	with driver.session(database=NEO4J_DB) as session:
+		result = session.run("CALL db.labels()")
+		labels = [record["label"] for record in result]
+	
+	# Process each label
+	for label in labels:
+		with driver.session(database=NEO4J_DB) as session:
+			# Find nodes without embeddings
+			query = f"""
+			MATCH (n:`{label}`)
+			WHERE n.embedding IS NULL
+			RETURN id(n) as nodeId, properties(n) as props
+			LIMIT $limit
+			"""
+			result = session.run(query, limit=limit)
+			nodes = list(result)
+			
+			for record in nodes:
+				total_processed += 1
+				node_id = record["nodeId"]
+				props = record["props"]
+				
+				# Create text from properties
+				text_parts = []
+				for key, value in props.items():
+					if key != "embedding" and value and isinstance(value, str):
+						text_parts.append(f"{key}: {value}")
+				
+				if not text_parts:
+					continue
+				
+				text = " | ".join(text_parts)
+				
+				try:
+					# Generate embedding
+					embedding = embeddings_model.embed_query(text)
+					
+					# Store embedding
+					update_query = f"""
+					MATCH (n:`{label}`)
+					WHERE id(n) = $nodeId
+					SET n.embedding = $embedding
+					SET n.embedding_text = $text
+					"""
+					session.run(update_query, nodeId=node_id, embedding=embedding, text=text)
+					success_count += 1
+				except Exception as e:
+					errors.append(f"Error on {label} node {node_id}: {str(e)[:100]}")
+	
+	return success_count, total_processed, errors
 
 
 def search_nodes(driver, question: str, limit: int = 6) -> List[dict]:
@@ -281,6 +366,32 @@ with st.sidebar:
 		st.caption(f"**Model:** {OPENROUTER_MODEL}")
 		st.caption(f"**Neo4j:** {NEO4J_DB}")
 		st.caption(f"**URI:** {NEO4J_URI[:30]}...")
+	
+	st.markdown("---")
+	st.markdown("**🔧 Admin Tools**")
+	
+	if EMBEDDINGS_AVAILABLE:
+		if st.button("⚡ Generate Embeddings", key="gen_embeddings", use_container_width=True, help="Generate embeddings for nodes without them"):
+			with st.spinner("Generating embeddings..."):
+				try:
+					driver = get_driver()
+					success, total, errors = generate_embeddings_for_nodes(driver, limit=100)
+					driver.close()
+					
+					if success > 0:
+						st.success(f"✅ Generated {success} embeddings (processed {total} nodes)")
+					else:
+						st.warning(f"⚠️ No embeddings generated (processed {total} nodes)")
+					
+					if errors:
+						with st.expander("⚠️ Errors"):
+							for err in errors[:10]:
+								st.caption(err)
+				except Exception as e:
+					st.error(f"Error: {e}")
+	else:
+		st.caption("⚠️ HuggingFace embeddings not installed")
+		st.caption("Run: `pip install langchain-huggingface sentence-transformers`")
 
 
 def render_messages(messages: List[Dict]):
