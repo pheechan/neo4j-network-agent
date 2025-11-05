@@ -613,36 +613,28 @@ if user_input and user_input.strip():
 						top_k=VECTOR_TOP_K,
 					)
 					
-					# Extract content from docs - if empty, fall back to Cypher to get full node data
-					snippets = []
-					for item in docs_and_scores:
-						try:
-							doc = item[0]
-							content = getattr(doc, "page_content", None) or getattr(doc, "content", None) or str(doc)
-						except Exception:
-							# item might itself be a Document
-							doc = item
-							content = getattr(doc, "page_content", None) or getattr(doc, "content", None) or str(doc)
-						if content and content.strip():
-							snippets.append(content)
-					
-					# If vector search found nodes but content is empty, use Cypher to get the actual data
-					if docs_and_scores and not snippets:
-						st.caption(f"⚠️ Vector search found {len(docs_and_scores)} nodes but text extraction failed. Using Cypher to get full data...")
+					# ALWAYS use Cypher fallback because vector text extraction is broken
+					# Vector search is still useful for semantic similarity, but we get text from Cypher
+					if docs_and_scores and len(docs_and_scores) > 0:
+						st.caption(f"✅ Vector search found {len(docs_and_scores)} similar nodes. Getting full data with Cypher...")
 						driver = get_driver()
-						# Get the same number of nodes from Cypher that vector search found
-						nodes = search_nodes(driver, user_input, limit=len(docs_and_scores))
+						nodes = search_nodes(driver, user_input, limit=VECTOR_TOP_K)
 						ctx = build_context(nodes)
 						if nodes:
-							st.caption(f"✅ พบข้อมูล {len(nodes)} รายการจาก Cypher (Found {len(nodes)} nodes)")
-					elif snippets:
-						ctx = "\n\n".join(snippets)
-						st.caption(f"✅ พบข้อมูล {len(snippets)} รายการจาก Vector Search (Found {len(snippets)} results)")
+							st.caption(f"✅ พบข้อมูล {len(nodes)} รายการ (Found {len(nodes)} nodes with complete data)")
+						else:
+							st.warning(f"⚠️ Cypher search found no matching text")
+							ctx = ""
 					else:
 						st.warning(f"⚠️ Vector search returned no results. Trying Cypher fallback...")
-						# Try cypher fallback
 						driver = get_driver()
 						nodes = search_nodes(driver, user_input)
+						ctx = build_context(nodes)
+						if nodes:
+							st.caption(f"✅ พบข้อมูล {len(nodes)} รายการจาก Cypher Search (Found {len(nodes)} nodes)")
+						else:
+							st.caption(f"❌ No results from Cypher search either")
+							ctx = ""
 						ctx = build_context(nodes)
 						if nodes:
 							st.caption(f"✅ พบข้อมูล {len(nodes)} รายการจาก Cypher Search (Found {len(nodes)} nodes)")
