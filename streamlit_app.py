@@ -155,12 +155,17 @@ def search_nodes(driver, question: str, limit: int = 6) -> List[dict]:
 	Search for nodes containing the question text in ANY string property.
 	This is more flexible than searching only specific properties like 'name' or 'text'.
 	"""
-	# Search across ALL properties of nodes (not just 'name' or 'text')
+	# Search across ALL string properties of nodes (skip arrays/embeddings)
 	q = """
 	MATCH (n)
 	WHERE any(prop IN keys(n) WHERE 
+		prop <> 'embedding' AND 
+		prop <> 'embedding_text' AND
 		n[prop] IS NOT NULL AND 
-		toLower(toString(n[prop])) CONTAINS toLower($q)
+		(
+			(valueType(n[prop]) = 'STRING' AND toLower(n[prop]) CONTAINS toLower($q)) OR
+			(valueType(n[prop]) = 'INTEGER' AND toString(n[prop]) CONTAINS $q)
+		)
 	)
 	RETURN n, labels(n) as node_labels
 	LIMIT $limit
