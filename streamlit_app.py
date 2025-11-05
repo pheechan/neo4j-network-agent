@@ -490,10 +490,17 @@ OPTIONS {indexConfig: {
 					result = session.run("""
 						MATCH (n)
 						WHERE any(prop IN keys(n) WHERE 
-							toLower(toString(n[prop])) CONTAINS 'santisook'
+							prop <> 'embedding' AND 
+							prop <> 'embedding_text' AND
+							n[prop] IS NOT NULL AND 
+							(
+								(valueType(n[prop]) = 'STRING' AND toLower(n[prop]) CONTAINS 'santisook') OR
+								(valueType(n[prop]) = 'INTEGER' AND toString(n[prop]) CONTAINS 'santisook')
+							)
 						)
 						RETURN labels(n) as labels, n.Stelligence as stelligence, 
-						       n.name as name, n.embedding IS NOT NULL as has_embedding
+						       n.`ชื่อ-นามสกุล` as name, n.embedding IS NOT NULL as has_embedding,
+						       n.embedding_text IS NOT NULL as has_text
 						LIMIT 3
 					""")
 					santisook_nodes = list(result)
@@ -501,7 +508,8 @@ OPTIONS {indexConfig: {
 						for record in santisook_nodes:
 							name_val = record['stelligence'] or record['name'] or "N/A"
 							emb_status = "✅" if record['has_embedding'] else "❌"
-							st.caption(f"{emb_status} {record['labels']} - {name_val}")
+							text_status = "📝" if record.get('has_text') else "❌"
+							st.caption(f"{emb_status} Embedding | {text_status} Text | {record['labels']} - {name_val}")
 					else:
 						st.warning("⚠️ No nodes found with 'Santisook'!")
 				
