@@ -53,10 +53,11 @@ VECTOR_TOP_K = int(get_config("VECTOR_TOP_K", "5"))
 
 # Try to import direct vector search (bypasses LangChain's broken text extraction)
 try:
-	from KG.VectorSearchDirect import query_vector_search_direct
+	from KG.VectorSearchDirect import query_vector_search_direct, query_multiple_vector_indexes
 	VECTOR_SEARCH_AVAILABLE = True
 except Exception as e:
 	query_vector_search_direct = None
+	query_multiple_vector_indexes = None
 	VECTOR_SEARCH_AVAILABLE = False
 	print(f"Direct vector search not available: {e}")
 
@@ -606,14 +607,13 @@ if user_input and user_input.strip():
 			ctx = ""
 			nodes = []
 			
-			# Use direct vector search (bypasses LangChain's broken text extraction)
-			if VECTOR_SEARCH_AVAILABLE and query_vector_search_direct is not None:
+			# Use direct vector search across MULTIPLE indexes (Person, Position, Agency, etc.)
+			if VECTOR_SEARCH_AVAILABLE and query_multiple_vector_indexes is not None:
 				try:
-					st.caption(f"🔍 Using direct vector search (index: {VECTOR_INDEX_NAME})...")
-					results = query_vector_search_direct(
+					st.caption(f"🔍 Searching across multiple vector indexes (Person, Position, Agency, Ministry, etc.)...")
+					results = query_multiple_vector_indexes(
 						user_input,
-						vector_index_name=VECTOR_INDEX_NAME,
-						top_k=VECTOR_TOP_K,
+						top_k_per_index=3,  # Get 3 results from each index
 					)
 					
 					# results is List[Tuple[dict, float]] - (node_properties, score)
