@@ -2,67 +2,56 @@
 
 ## Vector Search Embeddings - Setup Guide
 
-Your app currently tries to use OpenAI embeddings, but you only have an OpenRouter API key. **OpenRouter does NOT provide an embeddings endpoint** - it only does chat completions.
+✅ **UPDATE: Now using HuggingFace embeddings by default!**
 
-### Quick Fix Options:
+Your app now automatically uses **free HuggingFace embeddings** instead of requiring OpenAI API keys. No configuration needed!
 
-#### Option 1: Disable Vector Search (Simplest)
-Your app will work with just Cypher keyword search (already implemented as fallback).
+### What Changed:
 
-**Already done in the code** - the app now automatically disables vector RAG if no valid `OPENAI_API_KEY` is set.
+The app now supports **multiple embeddings providers** and automatically picks the best one:
 
-No changes needed! Just set your Streamlit secrets without `OPENAI_API_KEY` and the app will use Cypher search only.
-
----
-
-#### Option 2: Use Free HuggingFace Embeddings (Recommended)
-No API key needed, runs locally or on server.
-
-**Steps:**
-
-1. Add to `requirements.txt`:
-```
-sentence-transformers
-langchain-huggingface
-```
-
-2. In `streamlit_app.py`, change line 46-48 from:
-```python
-try:
-	from KG.VectorRAG import query_vector_rag
-except Exception:
-	query_vector_rag = None
-```
-to:
-```python
-try:
-	from KG.VectorRAG_HuggingFace import query_vector_rag
-except Exception:
-	query_vector_rag = None
-```
-
-3. Commit and push:
-```powershell
-git add requirements.txt streamlit_app.py KG/VectorRAG_HuggingFace.py
-git commit -m "Use HuggingFace embeddings instead of OpenAI"
-git push origin main
-```
-
-**Pros:** Free, no API keys, works anywhere
-**Cons:** Slightly slower first run (downloads model ~80MB), embeddings quality slightly lower than OpenAI's
+1. **HuggingFace** (free, no API key) - **DEFAULT** ⭐
+2. **OpenAI** (paid, requires OPENAI_API_KEY) - fallback if HuggingFace not installed
 
 ---
 
-#### Option 3: Get an OpenAI API Key
-Sign up at https://platform.openai.com/ and get a real OpenAI key.
+### Current Setup (Automatic):
 
-Then set in Streamlit secrets:
-```toml
-OPENAI_API_KEY = "sk-proj-..."  # Real OpenAI key, not OpenRouter
+```python
+# Auto-detection in KG/VectorRAG.py:
+try:
+    from langchain_huggingface import HuggingFaceEmbeddings  # Try free option first
+except ImportError:
+    from langchain_openai import OpenAIEmbeddings  # Fall back to OpenAI
 ```
 
-**Pros:** Best embedding quality
-**Cons:** Costs money (~$0.0001 per 1K tokens)
+**Model used**: `sentence-transformers/paraphrase-multilingual-MiniLM-L12-v2`
+- Supports Thai language ✅
+- Lightweight (~80MB)
+- Good quality embeddings
+- No API key required
+- Runs on server CPU
+
+---
+
+### Quick Comparison:
+
+| Provider | Cost | Thai Support | API Key | Quality |
+|----------|------|--------------|---------|---------|
+| **HuggingFace** (default) | Free | ✅ Yes | ❌ None | Good |
+| OpenAI | ~$0.0001/1K tokens | ✅ Yes | ✅ Required | Best |
+| OpenRouter | N/A | N/A | ❌ No embeddings | N/A |
+
+---
+
+### Installation (Already in requirements.txt):
+
+```
+langchain-huggingface>=0.1.0
+sentence-transformers>=2.2.0
+```
+
+Streamlit Cloud will automatically install these on deploy.
 
 ---
 

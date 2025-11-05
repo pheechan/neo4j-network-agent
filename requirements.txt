@@ -6,3 +6,7 @@ langchain>=0.3.0,<0.4.0
 langgraph==0.3.31
 langgraph-prebuilt==0.1.8
 python-dotenv>=1.0.0
+
+# HuggingFace embeddings (free alternative to OpenAI)
+langchain-huggingface>=0.1.0
+sentence-transformers>=2.2.0
