@@ -57,8 +57,8 @@ def get_driver():
 def search_nodes(driver, question: str, limit: int = 6) -> List[dict]:
 	q = """
 	MATCH (n)
-	WHERE (exists(n.name) AND toLower(n.name) CONTAINS toLower($q))
-	   OR (exists(n.text) AND toLower(n.text) CONTAINS toLower($q))
+	WHERE (n.name IS NOT NULL AND toLower(n.name) CONTAINS toLower($q))
+	   OR (n.text IS NOT NULL AND toLower(n.text) CONTAINS toLower($q))
 	RETURN n LIMIT $limit
 	"""
 	out = []
