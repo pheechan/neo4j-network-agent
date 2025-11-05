@@ -40,7 +40,7 @@ NEO4J_DB = get_config("NEO4J_DATABASE", "neo4j")
 
 OPENROUTER_API_KEY = get_config("OPENROUTER_API_KEY") or get_config("OPENAI_API_KEY")
 OPENROUTER_API_BASE = get_config("OPENROUTER_API_BASE", get_config("OPENAI_API_BASE", "https://api.openrouter.ai"))
-OPENROUTER_MODEL = get_config("OPENROUTER_MODEL", "nvidia/nemotron-nano-12b-v2-vl:free")
+OPENROUTER_MODEL = get_config("OPENROUTER_MODEL", "deepseek/deepseek-chat")
 
 # Vector/RAG configuration (optional, used by KG/VectorRAG.query_vector_rag)
 VECTOR_INDEX_NAME = get_config("VECTOR_INDEX_NAME", "default_index")
