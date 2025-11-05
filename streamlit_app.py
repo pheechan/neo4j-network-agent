@@ -121,13 +121,17 @@ def generate_embeddings_for_nodes(driver, limit=50):
 				node_id = record["nodeId"]
 				props = record["props"]
 				
-				# Create text from properties
+				# Create text from properties (include all string and number properties)
 				text_parts = []
 				for key, value in props.items():
-					if key != "embedding" and value and isinstance(value, str):
-						text_parts.append(f"{key}: {value}")
+					if key not in ["embedding", "embedding_text"] and value is not None:
+						if isinstance(value, str):
+							text_parts.append(f"{key}: {value}")
+						elif isinstance(value, (int, float)):
+							text_parts.append(f"{key}: {value}")
 				
 				if not text_parts:
+					errors.append(f"Skipped {label} node {node_id}: No text properties found (keys: {list(props.keys())})")
 					continue
 				
 				text = " | ".join(text_parts)
@@ -140,8 +144,8 @@ def generate_embeddings_for_nodes(driver, limit=50):
 					update_query = f"""
 					MATCH (n:`{label}`)
 					WHERE id(n) = $nodeId
-					SET n.embedding = $embedding
-					SET n.embedding_text = $text
+					SET n.embedding = $embedding,
+					    n.embedding_text = $text
 					"""
 					session.run(update_query, nodeId=node_id, embedding=embedding, text=text)
 					success_count += 1
