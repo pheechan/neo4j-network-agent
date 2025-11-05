@@ -42,10 +42,17 @@ VECTOR_EMBEDDING_PROPERTY = os.getenv("VECTOR_EMBEDDING_PROPERTY", "embedding")
 VECTOR_TOP_K = int(os.getenv("VECTOR_TOP_K", "3"))
 
 # Try to import the project's vector RAG helper (LangChain + Neo4jVector)
+# NOTE: Vector RAG requires OpenAI API key (not OpenRouter) for embeddings.
+# If you only have OpenRouter, vector search will be disabled and we'll fall back
+# to simple Cypher keyword search.
 try:
 	from KG.VectorRAG import query_vector_rag
 except Exception:
 	query_vector_rag = None
+
+# Temporary: disable vector RAG if no valid OpenAI key (OpenRouter doesn't support embeddings)
+if query_vector_rag and not os.getenv("OPENAI_API_KEY"):
+	query_vector_rag = None  # Force fallback to Cypher search
 
 
 def get_driver():
