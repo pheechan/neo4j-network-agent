@@ -612,7 +612,8 @@ if user_input and user_input.strip():
 						vector_embedding_property=VECTOR_EMBEDDING_PROPERTY,
 						top_k=VECTOR_TOP_K,
 					)
-					# build a short context from returned docs (each item may be (doc, score))
+					
+					# Extract content from docs - if empty, fall back to Cypher to get full node data
 					snippets = []
 					for item in docs_and_scores:
 						try:
@@ -622,11 +623,20 @@ if user_input and user_input.strip():
 							# item might itself be a Document
 							doc = item
 							content = getattr(doc, "page_content", None) or getattr(doc, "content", None) or str(doc)
-						snippets.append(content)
-					ctx = "\n\n".join(snippets)
+						if content and content.strip():
+							snippets.append(content)
 					
-					# Debug output
-					if snippets:
+					# If vector search found nodes but content is empty, use Cypher to get the actual data
+					if docs_and_scores and not snippets:
+						st.caption(f"⚠️ Vector search found {len(docs_and_scores)} nodes but text extraction failed. Using Cypher to get full data...")
+						driver = get_driver()
+						# Get the same number of nodes from Cypher that vector search found
+						nodes = search_nodes(driver, user_input, limit=len(docs_and_scores))
+						ctx = build_context(nodes)
+						if nodes:
+							st.caption(f"✅ พบข้อมูล {len(nodes)} รายการจาก Cypher (Found {len(nodes)} nodes)")
+					elif snippets:
+						ctx = "\n\n".join(snippets)
 						st.caption(f"✅ พบข้อมูล {len(snippets)} รายการจาก Vector Search (Found {len(snippets)} results)")
 					else:
 						st.warning(f"⚠️ Vector search returned no results. Trying Cypher fallback...")
