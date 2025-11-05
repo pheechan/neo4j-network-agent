@@ -128,7 +128,18 @@ def local_search(question: str, limit: int = 3) -> List[dict]:
 def ask_openrouter_requests(prompt: str, model: str = OPENROUTER_MODEL, max_tokens: int = 512) -> str:
 	if not OPENROUTER_API_KEY:
 		return "OpenRouter API key not set (OPENROUTER_API_KEY or OPENAI_API_KEY)"
-	url = f"{OPENROUTER_API_BASE.rstrip('/')}" + "/v1/chat/completions"
+	
+	# Handle both base URL formats:
+	# - https://api.openrouter.ai (needs /v1/chat/completions)
+	# - https://openrouter.ai/api/v1 (needs /chat/completions)
+	base = OPENROUTER_API_BASE.rstrip('/')
+	if base.endswith('/v1'):
+		# Already has /v1, just add /chat/completions
+		url = f"{base}/chat/completions"
+	else:
+		# Need to add /v1/chat/completions
+		url = f"{base}/v1/chat/completions"
+	
 	headers = {
 		"Authorization": f"Bearer {OPENROUTER_API_KEY}",
 		"Content-Type": "application/json",
