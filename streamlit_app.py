@@ -158,26 +158,31 @@ def generate_embeddings_for_nodes(driver, limit=50):
 def search_nodes(driver, question: str, limit: int = 6) -> List[dict]:
 	"""
 	Search for nodes containing the question text in ANY string property.
-	This is more flexible than searching only specific properties like 'name' or 'text'.
+	Supports partial matching - splits query into words and searches for each.
 	"""
-	# Search across ALL string properties of nodes (skip arrays/embeddings)
+	# Split query into words (works for both Thai and English)
+	words = [w.strip() for w in question.split() if len(w.strip()) > 1]
+	
+	# Build query that searches for ANY word in the query
+	# This helps with Thai names that might be stored differently
 	q = """
 	MATCH (n)
 	WHERE any(prop IN keys(n) WHERE 
 		prop <> 'embedding' AND 
 		prop <> 'embedding_text' AND
 		n[prop] IS NOT NULL AND 
-		(
-			(valueType(n[prop]) = 'STRING' AND toLower(n[prop]) CONTAINS toLower($q)) OR
-			(valueType(n[prop]) = 'INTEGER' AND toString(n[prop]) CONTAINS $q)
-		)
+		valueType(n[prop]) = 'STRING' AND
+		any(word IN $words WHERE toLower(n[prop]) CONTAINS toLower(word))
 	)
 	RETURN n, labels(n) as node_labels
 	LIMIT $limit
 	"""
 	out = []
 	with driver.session(database=NEO4J_DB) as session:
-		res = session.run(q, q=question, limit=limit)
+		# If no valid words, fall back to original query
+		if not words:
+			words = [question]
+		res = session.run(q, words=words, limit=limit)
 		for r in res:
 			node = r.get("n")
 			try:
