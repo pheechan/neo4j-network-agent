@@ -157,6 +157,110 @@ def query_multiple_vector_indexes(
     return all_results[:top_k_per_index * 2]  # Return roughly 2x top_k_per_index results total
 
 
+def query_with_relationships(
+    question: str,
+    vector_indexes: List[str] = None,
+    top_k_per_index: int = 3
+) -> List[dict]:
+    """
+    Query multiple vector indexes AND include connected nodes via relationships.
+    This ensures we get Person nodes with their Position, Agency, etc. via WORKS_AS relationships.
+    
+    Args:
+        question: The query string
+        vector_indexes: List of index names to search
+        top_k_per_index: How many results to get from each index
+        
+    Returns:
+        List of node dicts with relationships included as properties
+    """
+    # Default indexes to search
+    if vector_indexes is None:
+        vector_indexes = [
+            "person_vector_index",
+            "position_vector_index",
+            "agency_vector_index",
+            "ministry_vector_index",
+            "remark_vector_index",
+            "connect_by_vector_index",
+        ]
+    
+    embeddings_model = get_embeddings_model()
+    if not embeddings_model:
+        raise ValueError("HuggingFace embeddings not available")
+    
+    # Generate embedding once
+    question_embedding = embeddings_model.embed_query(question)
+    
+    # Connect to Neo4j
+    driver = GraphDatabase.driver(
+        os.getenv("NEO4J_URI"),
+        auth=(os.getenv("NEO4J_USERNAME"), os.getenv("NEO4J_PASSWORD"))
+    )
+    
+    # Query with relationships - get connected nodes too
+    all_results = []
+    with driver.session(database=os.getenv("NEO4J_DB", "neo4j")) as session:
+        for index_name in vector_indexes:
+            try:
+                # Query that also fetches connected nodes via relationships
+                query = """
+                CALL db.index.vector.queryNodes($index_name, $top_k, $embedding)
+                YIELD node, score
+                
+                // Get all relationships and connected nodes
+                OPTIONAL MATCH (node)-[r]->(connected)
+                WITH node, score, 
+                     collect(DISTINCT {
+                         type: type(r), 
+                         direction: 'outgoing',
+                         node: properties(connected),
+                         labels: labels(connected)
+                     }) as outgoing
+                
+                OPTIONAL MATCH (node)<-[r2]-(connected2)
+                WITH node, score, outgoing,
+                     collect(DISTINCT {
+                         type: type(r2),
+                         direction: 'incoming', 
+                         node: properties(connected2),
+                         labels: labels(connected2)
+                     }) as incoming
+                
+                RETURN 
+                    properties(node) as props,
+                    labels(node) as labels,
+                    outgoing + incoming as relationships,
+                    score
+                ORDER BY score DESC
+                """
+                
+                result = session.run(
+                    query,
+                    index_name=index_name,
+                    top_k=top_k_per_index,
+                    embedding=question_embedding
+                )
+                
+                for record in result:
+                    node_props = dict(record["props"])
+                    node_props["__labels__"] = record["labels"]
+                    node_props["__relationships__"] = record["relationships"]
+                    node_props["__score__"] = record["score"]
+                    all_results.append(node_props)
+                    
+            except Exception as e:
+                print(f"Warning: Could not query index {index_name}: {e}")
+                continue
+    
+    driver.close()
+    
+    # Sort by score
+    all_results.sort(key=lambda x: x.get("__score__", 0), reverse=True)
+    
+    return all_results[:top_k_per_index * 2]
+
+
 if __name__ == "__main__":
     # Test the function
     print("Testing direct vector search (single index)...")

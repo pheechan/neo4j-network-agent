@@ -53,11 +53,12 @@ VECTOR_TOP_K = int(get_config("VECTOR_TOP_K", "5"))
 
 # Try to import direct vector search (bypasses LangChain's broken text extraction)
 try:
-	from KG.VectorSearchDirect import query_vector_search_direct, query_multiple_vector_indexes
+	from KG.VectorSearchDirect import query_vector_search_direct, query_multiple_vector_indexes, query_with_relationships
 	VECTOR_SEARCH_AVAILABLE = True
 except Exception as e:
 	query_vector_search_direct = None
 	query_multiple_vector_indexes = None
+	query_with_relationships = None
 	VECTOR_SEARCH_AVAILABLE = False
 	print(f"Direct vector search not available: {e}")
 
@@ -201,6 +202,7 @@ def build_context(nodes: List[dict]) -> str:
 	"""
 	Build context from node properties.
 	Handles both English and Thai property names, plus custom "Stelligence" field.
+	NOW also includes relationship information (WORKS_AS, etc.).
 	"""
 	if not nodes:
 		return ""
@@ -240,7 +242,7 @@ def build_context(nodes: List[dict]) -> str:
 		# If no common text properties, include all string values (excluding labels, IDs, and embeddings)
 		if not text_props:
 			for key, val in n.items():
-				if key not in ["__labels__", "id", "embedding", "embedding_text"] and val and isinstance(val, str):
+				if key not in ["__labels__", "id", "embedding", "embedding_text", "__relationships__", "__score__"] and val and isinstance(val, str):
 					text_props.append(f"{key}: {val}")
 		
 		text = " | ".join(text_props) if text_props else ""
@@ -249,7 +251,37 @@ def build_context(nodes: List[dict]) -> str:
 		labels = n.get("__labels__", [])
 		label_str = f" ({', '.join(labels)})" if labels else ""
 		
-		pieces.append(f"{name}{label_str}: {text}")
+		# Add relationship information if available
+		relationships = n.get("__relationships__", [])
+		rel_info = []
+		if relationships:
+			for rel in relationships:
+				if rel and isinstance(rel, dict):
+					rel_type = rel.get("type", "")
+					direction = rel.get("direction", "")
+					connected_node = rel.get("node", {})
+					connected_labels = rel.get("labels", [])
+					
+					# Get meaningful info from connected node
+					connected_name = None
+					for key in ["Stelligence", "ชื่อ-นามสกุล", "ตำแหน่ง", "หน่วยงาน", "name", "title"]:
+						if key in connected_node and connected_node[key]:
+							connected_name = connected_node[key]
+							break
+					
+					if connected_name:
+						label_str_conn = f" ({', '.join(connected_labels)})" if connected_labels else ""
+						if direction == "outgoing":
+							rel_info.append(f"{rel_type} → {connected_name}{label_str_conn}")
+						else:
+							rel_info.append(f"← {rel_type} ← {connected_name}{label_str_conn}")
+		
+		# Combine node info with relationships
+		node_str = f"{name}{label_str}: {text}"
+		if rel_info:
+			node_str += "\n  Relationships: " + ", ".join(rel_info)
+		
+		pieces.append(node_str)
 	return "\n\n".join(pieces)
 
 
@@ -607,27 +639,24 @@ if user_input and user_input.strip():
 			ctx = ""
 			nodes = []
 			
-			# Use direct vector search across MULTIPLE indexes (Person, Position, Agency, etc.)
-			if VECTOR_SEARCH_AVAILABLE and query_multiple_vector_indexes is not None:
+			# Use relationship-aware vector search (gets nodes + their connections via WORKS_AS, etc.)
+			if VECTOR_SEARCH_AVAILABLE and query_with_relationships is not None:
 				try:
-					st.caption(f"🔍 Searching across multiple vector indexes (Person, Position, Agency, Ministry, etc.)...")
-					results = query_multiple_vector_indexes(
+					st.caption(f"🔍 Searching with relationships (Person → Position, Agency, etc.)...")
+					results = query_with_relationships(
 						user_input,
 						top_k_per_index=3,  # Get 3 results from each index
 					)
 					
-					# results is List[Tuple[dict, float]] - (node_properties, score)
+					# results is List[dict] with __relationships__ included
 					if results and len(results) > 0:
-						st.caption(f"✅ Vector search found {len(results)} semantically similar nodes")
+						st.caption(f"✅ Found {len(results)} nodes with relationship data")
 						
-						# Extract node dictionaries from (node_dict, score) tuples
-						nodes = [node_dict for node_dict, score in results]
-						
-						# Build context from the node properties directly
-						ctx = build_context(nodes)
+						# Build context from the node properties AND relationships
+						ctx = build_context(results)
 						
 						if ctx.strip():
-							st.caption(f"✅ พบข้อมูล {len(nodes)} รายการ (Found {len(nodes)} nodes with data)")
+							st.caption(f"✅ พบข้อมูล {len(results)} รายการพร้อมความสัมพันธ์ (Found {len(results)} nodes with relationships)")
 						else:
 							st.warning(f"⚠️ Vector search found nodes but context is empty. Trying Cypher fallback...")
 							driver = get_driver()
