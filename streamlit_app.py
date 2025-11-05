@@ -292,6 +292,12 @@ def render_messages(messages: List[Dict]):
 st.markdown("## 🤖 Neo4j Knowledge Agent")
 st.caption("Ask me anything about the knowledge graph")
 
+# Show info about embeddings on first visit
+if "shown_embeddings_info" not in st.session_state:
+	with st.info("ℹ️ **Using free HuggingFace embeddings** - First query may take ~30s to download the model (one-time). Subsequent queries will be fast!"):
+		pass
+	st.session_state.shown_embeddings_info = True
+
 # Render conversation history
 render_messages(st.session_state.threads[st.session_state.current_thread]["messages"])
 
