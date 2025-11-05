@@ -189,20 +189,20 @@ def build_context(nodes: List[dict]) -> str:
 		return ""
 	pieces = []
 	for i, n in enumerate(nodes, 1):
-		# Try common property names for title/name
+		# Try common property names for title/name (including "Stelligence" which is your custom property)
 		name = (n.get("name") or n.get("title") or n.get("label") or 
-		        n.get("id") or f"node_{i}")
+		        n.get("Stelligence") or n.get("id") or f"node_{i}")
 		
 		# Try common property names for content/description
 		text_props = []
-		for key in ["text", "description", "content", "summary", "value"]:
+		for key in ["text", "description", "content", "summary", "value", "Stelligence"]:
 			if key in n and n[key]:
 				text_props.append(str(n[key]))
 		
-		# If no common text properties, include all string values (excluding labels and IDs)
+		# If no common text properties, include all string values (excluding labels, IDs, and embeddings)
 		if not text_props:
 			for key, val in n.items():
-				if key not in ["__labels__", "id", "name", "title"] and val and isinstance(val, str):
+				if key not in ["__labels__", "id", "embedding", "embedding_text"] and val and isinstance(val, str):
 					text_props.append(f"{key}: {val}")
 		
 		text = " | ".join(text_props) if text_props else ""
@@ -412,6 +412,71 @@ with st.sidebar:
 	else:
 		st.caption("⚠️ HuggingFace embeddings not installed")
 		st.caption("Run: `pip install langchain-huggingface sentence-transformers`")
+	
+	st.markdown("---")
+	st.markdown("**🔍 Database Debug**")
+	
+	if st.button("📊 Check Database Status", key="check_db", use_container_width=True):
+		with st.spinner("Checking database..."):
+			try:
+				driver = get_driver()
+				with driver.session(database=NEO4J_DB) as session:
+					# Check for vector indexes
+					st.markdown("**Vector Indexes:**")
+					result = session.run("SHOW INDEXES WHERE type = 'VECTOR'")
+					indexes = list(result)
+					if indexes:
+						for idx in indexes:
+							st.caption(f"✅ {idx.get('name')} - {idx.get('labelsOrTypes')}")
+					else:
+						st.warning("⚠️ No vector indexes found!")
+						st.caption("Create indexes in Neo4j Browser:")
+						st.code("""CREATE VECTOR INDEX person_vector_index IF NOT EXISTS
+FOR (n:Person) ON n.embedding
+OPTIONS {indexConfig: {
+  `vector.dimensions`: 384,
+  `vector.similarity_function`: 'cosine'
+}};""", language="cypher")
+					
+					# Check for nodes with embeddings
+					st.markdown("**Nodes with Embeddings:**")
+					result = session.run("""
+						MATCH (n)
+						WHERE n.embedding IS NOT NULL
+						RETURN labels(n)[0] as label, count(n) as count
+						ORDER BY count DESC
+						LIMIT 10
+					""")
+					nodes_with_emb = list(result)
+					if nodes_with_emb:
+						for record in nodes_with_emb:
+							st.caption(f"✅ {record['label']}: {record['count']} nodes")
+					else:
+						st.warning("⚠️ No nodes have embeddings! Click 'Generate Embeddings' above.")
+					
+					# Check for Santisook
+					st.markdown("**Test Search (Santisook):**")
+					result = session.run("""
+						MATCH (n)
+						WHERE any(prop IN keys(n) WHERE 
+							toLower(toString(n[prop])) CONTAINS 'santisook'
+						)
+						RETURN labels(n) as labels, n.Stelligence as stelligence, 
+						       n.name as name, n.embedding IS NOT NULL as has_embedding
+						LIMIT 3
+					""")
+					santisook_nodes = list(result)
+					if santisook_nodes:
+						for record in santisook_nodes:
+							name_val = record['stelligence'] or record['name'] or "N/A"
+							emb_status = "✅" if record['has_embedding'] else "❌"
+							st.caption(f"{emb_status} {record['labels']} - {name_val}")
+					else:
+						st.warning("⚠️ No nodes found with 'Santisook'!")
+				
+				driver.close()
+			except Exception as e:
+				st.error(f"Error: {str(e)[:200]}")
 
 
 def render_messages(messages: List[Dict]):
@@ -463,6 +528,7 @@ if user_input and user_input.strip():
 			# prefer vector RAG retrieval (if available), otherwise fall back to simple node search
 			if query_vector_rag is not None:
 				try:
+					st.caption(f"🔍 Using vector search (index: {VECTOR_INDEX_NAME}, label: {VECTOR_NODE_LABEL})...")
 					docs_and_scores = query_vector_rag(
 						user_input,
 						vector_index_name=VECTOR_INDEX_NAME,
@@ -483,15 +549,32 @@ if user_input and user_input.strip():
 							content = getattr(doc, "page_content", None) or getattr(doc, "content", None) or str(doc)
 						snippets.append(content)
 					ctx = "\n\n".join(snippets)
+					
+					# Debug output
+					if snippets:
+						st.caption(f"✅ พบข้อมูล {len(snippets)} รายการจาก Vector Search (Found {len(snippets)} results)")
+					else:
+						st.warning(f"⚠️ Vector search returned no results. Trying Cypher fallback...")
+						# Try cypher fallback
+						driver = get_driver()
+						nodes = search_nodes(driver, user_input)
+						ctx = build_context(nodes)
+						if nodes:
+							st.caption(f"✅ พบข้อมูล {len(nodes)} รายการจาก Cypher Search (Found {len(nodes)} nodes)")
+						else:
+							st.caption(f"❌ No results from Cypher search either")
 				except Exception as e:
 					# fall back to simple cypher search if vector retrieval fails
+					st.warning(f"⚠️ Vector search error: {str(e)[:100]}... Trying Cypher fallback...")
 					try:
 						driver = get_driver()
 						nodes = search_nodes(driver, user_input)
 						ctx = build_context(nodes)
+						if nodes:
+							st.caption(f"✅ พบข้อมูล {len(nodes)} รายการจาก Cypher Search (Found {len(nodes)} nodes)")
 					except Exception as e2:
 						ctx = ""
-						st.error(f"Vector RAG error: {e}; fallback error: {e2}")
+						st.error(f"Both vector and Cypher search failed. Vector error: {str(e)[:50]}, Cypher error: {str(e2)[:50]}")
 			else:
 				# query_vector_rag not available (package or import issue) — use cypher search
 				try:
