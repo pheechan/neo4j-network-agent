@@ -1,7 +1,8 @@
 langchain_community==0.3.21
 neo4j==5.28.1
 langchain_openai==0.3.12
-langchian==0.3.23
+# Fixed typo: "langchian" -> "langchain". Use a compatible 0.3.x constraint.
+langchain>=0.3.0,<0.4.0
 langgraph==0.3.31
 langgraph-prebuilt==0.1.8
 python-dotenv>=1.0.0
