@@ -355,20 +355,28 @@ if user_input and user_input.strip():
 					driver = get_driver()
 					nodes = search_nodes(driver, user_input)
 					ctx = build_context(nodes)
+					
+					# Debug: show how many nodes were found
+					if nodes:
+						st.caption(f"✅ พบข้อมูล {len(nodes)} รายการจาก Neo4j (Found {len(nodes)} nodes)")
+					else:
+						st.caption(f"⚠️ ไม่พบข้อมูลที่ตรงกับคำค้นหา '{user_input}' (No matching nodes found)")
+						
 				except Exception as e:
 					ctx = ""
-					st.error(f"Neo4j error: {e}")
+					st.error(f"❌ Neo4j error: {e}")
 
-			# final fallback: if we still don't have context, try local in-memory docs
-			if not ctx:
-				try:
-					local_nodes = local_search(user_input, limit=VECTOR_TOP_K)
-					if local_nodes:
-						ctx = build_context(local_nodes)
-						st.caption("ℹ️ Using local fallback documents")
-				except Exception:
-					# silently ignore — ctx remains empty
-					pass
+			# Don't use fallback docs if they're irrelevant to the query
+			# Only use fallback for demo/development when Neo4j is completely unavailable
+			if not ctx and not nodes:
+				# Check if we're in a real error state (can't connect) vs just no results
+				st.info("💡 ไม่พบข้อมูลที่เกี่ยวข้องใน Knowledge Graph / No relevant information found in the knowledge graph")
+				ctx = ""  # Let the LLM know there's no context
+			
+			# Show context in expandable section for debugging
+			if ctx:
+				with st.expander("🔍 ดูข้อมูลที่พบ (View Retrieved Context)", expanded=False):
+					st.code(ctx, language="text")
 
 			# Improved prompt for Thai language and better context usage
 			prompt = f"""คุณเป็นผู้ช่วยที่ชาญฉลาดและตอบคำถามอย่างเป็นกันเอง (You are a helpful and knowledgeable assistant)
