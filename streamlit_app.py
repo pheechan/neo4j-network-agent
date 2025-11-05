@@ -51,13 +51,14 @@ VECTOR_SOURCE_PROPERTY = get_config("VECTOR_SOURCE_PROPERTY", "embedding_text")
 VECTOR_EMBEDDING_PROPERTY = get_config("VECTOR_EMBEDDING_PROPERTY", "embedding")
 VECTOR_TOP_K = int(get_config("VECTOR_TOP_K", "5"))
 
-# Try to import the project's vector RAG helper (LangChain + Neo4jVector)
-# Now supports both HuggingFace (free) and OpenAI embeddings
+# Try to import direct vector search (bypasses LangChain's broken text extraction)
 try:
-	from KG.VectorRAG import query_vector_rag
+	from KG.VectorSearchDirect import query_vector_search_direct
+	VECTOR_SEARCH_AVAILABLE = True
 except Exception as e:
-	query_vector_rag = None
-	print(f"Vector RAG not available: {e}")
+	query_vector_search_direct = None
+	VECTOR_SEARCH_AVAILABLE = False
+	print(f"Direct vector search not available: {e}")
 
 # Try to import HuggingFace embeddings for generating embeddings
 try:
@@ -605,46 +606,45 @@ if user_input and user_input.strip():
 			ctx = ""
 			nodes = []
 			
-			# prefer vector RAG retrieval (if available), otherwise fall back to simple node search
-			if query_vector_rag is not None:
+			# Use direct vector search (bypasses LangChain's broken text extraction)
+			if VECTOR_SEARCH_AVAILABLE and query_vector_search_direct is not None:
 				try:
-					st.caption(f"🔍 Using vector search (index: {VECTOR_INDEX_NAME}, label: {VECTOR_NODE_LABEL})...")
-					docs_and_scores = query_vector_rag(
+					st.caption(f"🔍 Using direct vector search (index: {VECTOR_INDEX_NAME})...")
+					results = query_vector_search_direct(
 						user_input,
 						vector_index_name=VECTOR_INDEX_NAME,
-						vector_node_label=VECTOR_NODE_LABEL,
-						vector_source_property=VECTOR_SOURCE_PROPERTY,
-						vector_embedding_property=VECTOR_EMBEDDING_PROPERTY,
 						top_k=VECTOR_TOP_K,
 					)
 					
-					# ALWAYS use Cypher fallback because vector text extraction is broken
-					# Vector search is still useful for semantic similarity, but we get text from Cypher
-					if docs_and_scores and len(docs_and_scores) > 0:
-						st.caption(f"✅ Vector search found {len(docs_and_scores)} similar nodes. Getting full data with Cypher...")
-						driver = get_driver()
-						nodes = search_nodes(driver, user_input, limit=VECTOR_TOP_K)
+					# results is List[Tuple[dict, float]] - (node_properties, score)
+					if results and len(results) > 0:
+						st.caption(f"✅ Vector search found {len(results)} semantically similar nodes")
+						
+						# Extract node dictionaries from (node_dict, score) tuples
+						nodes = [node_dict for node_dict, score in results]
+						
+						# Build context from the node properties directly
 						ctx = build_context(nodes)
-						if nodes:
-							st.caption(f"✅ พบข้อมูล {len(nodes)} รายการ (Found {len(nodes)} nodes with complete data)")
+						
+						if ctx.strip():
+							st.caption(f"✅ พบข้อมูล {len(nodes)} รายการ (Found {len(nodes)} nodes with data)")
 						else:
-							st.warning(f"⚠️ Cypher search found no matching text")
-							ctx = ""
+							st.warning(f"⚠️ Vector search found nodes but context is empty. Trying Cypher fallback...")
+							driver = get_driver()
+							nodes = search_nodes(driver, user_input)
+							ctx = build_context(nodes)
+							if nodes:
+								st.caption(f"✅ พบข้อมูล {len(nodes)} รายการจาก Cypher (Found {len(nodes)} nodes)")
 					else:
 						st.warning(f"⚠️ Vector search returned no results. Trying Cypher fallback...")
 						driver = get_driver()
 						nodes = search_nodes(driver, user_input)
 						ctx = build_context(nodes)
 						if nodes:
-							st.caption(f"✅ พบข้อมูล {len(nodes)} รายการจาก Cypher Search (Found {len(nodes)} nodes)")
+							st.caption(f"✅ พบข้อมูล {len(nodes)} รายการจาก Cypher (Found {len(nodes)} nodes)")
 						else:
 							st.caption(f"❌ No results from Cypher search either")
-							ctx = ""
-						ctx = build_context(nodes)
-						if nodes:
-							st.caption(f"✅ พบข้อมูล {len(nodes)} รายการจาก Cypher Search (Found {len(nodes)} nodes)")
-						else:
-							st.caption(f"❌ No results from Cypher search either")
+							
 				except Exception as e:
 					# fall back to simple cypher search if vector retrieval fails
 					st.warning(f"⚠️ Vector search error: {str(e)[:100]}... Trying Cypher fallback...")
@@ -653,7 +653,7 @@ if user_input and user_input.strip():
 						nodes = search_nodes(driver, user_input)
 						ctx = build_context(nodes)
 						if nodes:
-							st.caption(f"✅ พบข้อมูล {len(nodes)} รายการจาก Cypher Search (Found {len(nodes)} nodes)")
+							st.caption(f"✅ พบข้อมูล {len(nodes)} รายการจาก Cypher (Found {len(nodes)} nodes)")
 					except Exception as e2:
 						ctx = ""
 						st.error(f"Both vector and Cypher search failed. Vector error: {str(e)[:50]}, Cypher error: {str(e2)[:50]}")
