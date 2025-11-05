@@ -183,21 +183,42 @@ def search_nodes(driver, question: str, limit: int = 6) -> List[dict]:
 def build_context(nodes: List[dict]) -> str:
 	"""
 	Build context from node properties.
-	Tries common property names and falls back to all string properties.
+	Handles both English and Thai property names, plus custom "Stelligence" field.
 	"""
 	if not nodes:
 		return ""
 	pieces = []
 	for i, n in enumerate(nodes, 1):
-		# Try common property names for title/name (including "Stelligence" which is your custom property)
-		name = (n.get("name") or n.get("title") or n.get("label") or 
-		        n.get("Stelligence") or n.get("id") or f"node_{i}")
+		# Try common property names (English + Thai + custom "Stelligence")
+		name = (n.get("name") or 
+		        n.get("title") or 
+		        n.get("label") or 
+		        n.get("Stelligence") or 
+		        n.get("ชื่อ-นามสกุล") or  # Thai: Full Name
+		        n.get("ตำแหน่ง") or       # Thai: Position
+		        n.get("หน่วยงาน") or      # Thai: Agency
+		        n.get("กระทรวง") or       # Thai: Ministry
+		        n.get("id") or 
+		        f"node_{i}")
 		
-		# Try common property names for content/description
+		# Try common property names for content/description (English + Thai)
 		text_props = []
-		for key in ["text", "description", "content", "summary", "value", "Stelligence"]:
+		content_keys = [
+			"text", "description", "content", "summary", "value",
+			"Stelligence",
+			"ชื่อ-นามสกุล",    # Thai: Full Name
+			"ตำแหน่ง",         # Thai: Position
+			"หน่วยงาน",        # Thai: Agency
+			"กระทรวง",         # Thai: Ministry
+			"Connect by",
+			"Remark",
+			"Associate",
+			"ชื่อเล่น",        # Thai: Nickname
+			"Level"
+		]
+		for key in content_keys:
 			if key in n and n[key]:
-				text_props.append(str(n[key]))
+				text_props.append(f"{key}: {n[key]}")
 		
 		# If no common text properties, include all string values (excluding labels, IDs, and embeddings)
 		if not text_props:
