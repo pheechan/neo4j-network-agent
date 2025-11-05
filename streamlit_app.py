@@ -24,22 +24,30 @@ except Exception:
 
 load_dotenv()
 
-# Configuration (from .env)
-NEO4J_URI = os.getenv("NEO4J_URI", "bolt://localhost:7687")
-NEO4J_USER = os.getenv("NEO4J_USERNAME", "neo4j")
-NEO4J_PWD = os.getenv("NEO4J_PASSWORD", "")
-NEO4J_DB = os.getenv("NEO4J_DATABASE", "neo4j")
+# Read from Streamlit secrets (cloud) or environment variables (local)
+def get_config(key, default=""):
+	"""Get config from st.secrets (Streamlit Cloud) or os.getenv (local)"""
+	try:
+		return st.secrets.get(key, os.getenv(key, default))
+	except:
+		return os.getenv(key, default)
 
-OPENROUTER_API_KEY = os.getenv("OPENROUTER_API_KEY") or os.getenv("OPENAI_API_KEY")
-OPENROUTER_API_BASE = os.getenv("OPENROUTER_API_BASE", os.getenv("OPENAI_API_BASE", "https://api.openrouter.ai"))
-OPENROUTER_MODEL = os.getenv("OPENROUTER_MODEL", "nvidia/nemotron-nano-12b-v2-vl:free")
+# Configuration (from .env or Streamlit secrets)
+NEO4J_URI = get_config("NEO4J_URI", "bolt://localhost:7687")
+NEO4J_USER = get_config("NEO4J_USERNAME", "neo4j")
+NEO4J_PWD = get_config("NEO4J_PASSWORD", "")
+NEO4J_DB = get_config("NEO4J_DATABASE", "neo4j")
+
+OPENROUTER_API_KEY = get_config("OPENROUTER_API_KEY") or get_config("OPENAI_API_KEY")
+OPENROUTER_API_BASE = get_config("OPENROUTER_API_BASE", get_config("OPENAI_API_BASE", "https://api.openrouter.ai"))
+OPENROUTER_MODEL = get_config("OPENROUTER_MODEL", "nvidia/nemotron-nano-12b-v2-vl:free")
 
 # Vector/RAG configuration (optional, used by KG/VectorRAG.query_vector_rag)
-VECTOR_INDEX_NAME = os.getenv("VECTOR_INDEX_NAME", "default_index")
-VECTOR_NODE_LABEL = os.getenv("VECTOR_NODE_LABEL", "Document")
-VECTOR_SOURCE_PROPERTY = os.getenv("VECTOR_SOURCE_PROPERTY", "text")
-VECTOR_EMBEDDING_PROPERTY = os.getenv("VECTOR_EMBEDDING_PROPERTY", "embedding")
-VECTOR_TOP_K = int(os.getenv("VECTOR_TOP_K", "3"))
+VECTOR_INDEX_NAME = get_config("VECTOR_INDEX_NAME", "default_index")
+VECTOR_NODE_LABEL = get_config("VECTOR_NODE_LABEL", "Document")
+VECTOR_SOURCE_PROPERTY = get_config("VECTOR_SOURCE_PROPERTY", "text")
+VECTOR_EMBEDDING_PROPERTY = get_config("VECTOR_EMBEDDING_PROPERTY", "embedding")
+VECTOR_TOP_K = int(get_config("VECTOR_TOP_K", "3"))
 
 # Try to import the project's vector RAG helper (LangChain + Neo4jVector)
 # Now supports both HuggingFace (free) and OpenAI embeddings
