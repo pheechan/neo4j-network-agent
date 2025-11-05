@@ -193,8 +193,44 @@ def ask_openrouter_requests(prompt: str, model: str = OPENROUTER_MODEL, max_toke
 		return f"OpenRouter request failed: {type(e).__name__} {e}"
 
 
-## Streamlit chat UI with threads
-st.set_page_config(page_title="Neo4j Chat — Streamlit", layout="wide")
+## Streamlit chat UI with ChatGPT-like design
+st.set_page_config(
+	page_title="Neo4j Chat Agent", 
+	layout="centered",  # Changed from "wide" to "centered" for ChatGPT-like feel
+	page_icon="🤖",
+	initial_sidebar_state="collapsed"  # Start with sidebar hidden
+)
+
+# Custom CSS for ChatGPT-like styling
+st.markdown("""
+<style>
+	/* Hide Streamlit branding */
+	#MainMenu {visibility: hidden;}
+	footer {visibility: hidden;}
+	
+	/* Adjust spacing for cleaner look */
+	.block-container {
+		padding-top: 2rem;
+		padding-bottom: 2rem;
+	}
+	
+	/* Style chat messages */
+	.stChatMessage {
+		padding: 1rem;
+		border-radius: 0.5rem;
+	}
+	
+	/* Sidebar styling */
+	[data-testid="stSidebar"] {
+		background-color: #f7f7f8;
+	}
+	
+	/* Chat input styling */
+	.stChatInput {
+		border-radius: 1.5rem;
+	}
+</style>
+""", unsafe_allow_html=True)
 
 if "threads" not in st.session_state:
 	# threads: dict[thread_id] -> {"title": str, "messages": [ {role,content,time} ]}
@@ -216,56 +252,70 @@ def clear_current_thread():
 
 
 with st.sidebar:
-	st.header("Threads")
+	st.markdown("### 💬 Neo4j Chat Agent")
+	st.markdown("---")
+	
+	# Thread management
+	st.markdown("**Conversations**")
 	for tid, meta in list(st.session_state.threads.items()):
-		label = f"{meta['title']} ({len(meta['messages'])})"
-		if st.button(label, key=f"thread-{tid}"):
+		label = f"💬 {meta['title']}"
+		if st.button(label, key=f"thread-{tid}", use_container_width=True):
 			st.session_state.current_thread = tid
 
+	col_a, col_b = st.columns(2)
+	with col_a:
+		if st.button("➕ New", key="new_thread", use_container_width=True):
+			new_thread()
+			st.rerun()
+	with col_b:
+		if st.button("🗑️ Clear", key="clear_thread", use_container_width=True):
+			clear_current_thread()
+			st.rerun()
+	
 	st.markdown("---")
-	if st.button("New Thread"):
-		new_thread()
-	if st.button("Clear Thread"):
-		clear_current_thread()
-	st.markdown("---")
-	st.write("Config")
-	st.text_input("Model", value=OPENROUTER_MODEL, key="_model", disabled=True)
-	st.write("Neo4j:")
-	st.write(f"{NEO4J_URI} ({NEO4J_DB})")
+	st.markdown("**Settings**")
+	with st.expander("🔧 Configuration"):
+		st.caption(f"**Model:** {OPENROUTER_MODEL}")
+		st.caption(f"**Neo4j:** {NEO4J_DB}")
+		st.caption(f"**URI:** {NEO4J_URI[:30]}...")
 
 
 def render_messages(messages: List[Dict]):
+	"""Render messages in ChatGPT style"""
 	for m in messages:
 		role = m.get("role")
 		content = m.get("content")
-		ts = m.get("time")
-		label = f"{role.capitalize()} - {ts}" if ts else role.capitalize()
 		if role == "user":
-			st.chat_message("user", avatar="🧑").write(content)
+			with st.chat_message("user", avatar="👤"):
+				st.markdown(content)
 		else:
-			st.chat_message("assistant", avatar="🤖").write(content)
+			with st.chat_message("assistant", avatar="🤖"):
+				st.markdown(content)
 
 
-st.title("Neo4j Chatbot")
+# Main chat interface - ChatGPT style (no columns, full width centered)
+st.markdown("## 🤖 Neo4j Knowledge Agent")
+st.caption("Ask me anything about the knowledge graph")
 
-col1, col2 = st.columns([3, 1])
+# Render conversation history
+render_messages(st.session_state.threads[st.session_state.current_thread]["messages"])
 
-with col1:
-	st.subheader(st.session_state.threads[st.session_state.current_thread]["title"])
-	render_messages(st.session_state.threads[st.session_state.current_thread]["messages"])
+# Chat input at the bottom (ChatGPT style)
+user_input = st.chat_input("ส่งข้อความของคุณ... (Type your message...)", key="chat_input")
 
-	with st.form(key="input_form", clear_on_submit=True):
-		user_input = st.text_area("", placeholder="Type your message and press Send...", key="user_input", height=100)
-		submitted = st.form_submit_button("Send")
+if user_input and user_input.strip():
+	# append user message
+	tid = st.session_state.current_thread
+	msg = {"role": "user", "content": user_input.strip(), "time": datetime.now().strftime("%Y-%m-%d %H:%M:%S")}
+	st.session_state.threads[tid]["messages"].append(msg)
+	
+	# Display user message immediately
+	with st.chat_message("user", avatar="👤"):
+		st.markdown(user_input.strip())
 
-	if submitted and user_input and user_input.strip():
-		# append user message
-		tid = st.session_state.current_thread
-		msg = {"role": "user", "content": user_input.strip(), "time": datetime.now().strftime("%Y-%m-%d %H:%M:%S")}
-		st.session_state.threads[tid]["messages"].append(msg)
-
-		# query neo4j for context and call model
-		with st.spinner("Querying Neo4j and generating answer..."):
+	# query neo4j for context and call model
+	with st.chat_message("assistant", avatar="🤖"):
+		with st.spinner("กำลังค้นหาข้อมูล... (Searching knowledge graph...)"):
 			# prefer vector RAG retrieval (if available), otherwise fall back to simple node search
 			ctx = ""
 			if query_vector_rag is not None:
@@ -315,67 +365,36 @@ with col1:
 					local_nodes = local_search(user_input, limit=VECTOR_TOP_K)
 					if local_nodes:
 						ctx = build_context(local_nodes)
-						st.info("Using local fallback documents for context")
+						st.caption("ℹ️ Using local fallback documents")
 				except Exception:
 					# silently ignore — ctx remains empty
 					pass
 
-			prompt = f"""You are an assistant. Use the following context extracted from a Neo4j graph to answer the user's question.\n\nQuestion:\n{user_input}\n\nContext:\n{ctx}\n\nAnswer concisely."""
-			answer = ask_openrouter_requests(prompt)
-			resp = {"role": "assistant", "content": answer, "time": datetime.now().strftime("%Y-%m-%d %H:%M:%S")}
-			st.session_state.threads[tid]["messages"].append(resp)
-			# Streamlit will usually rerun after form submit; try to trigger a rerun if available
-			try:
-				st.experimental_rerun()
-			except Exception:
-				# older/newer streamlit versions may not expose experimental_rerun
-				pass
+			# Improved prompt for Thai language and better context usage
+			prompt = f"""คุณเป็นผู้ช่วยที่ชาญฉลาดและตอบคำถามอย่างเป็นกันเอง (You are a helpful and knowledgeable assistant)
 
-with col2:
-	st.subheader("Context Preview")
-	# show most recent context for the current thread (if any)
-	msgs = st.session_state.threads[st.session_state.current_thread]["messages"]
-	last_user = None
-	for m in reversed(msgs):
-		if m["role"] == "user":
-			last_user = m["content"]
-			break
-	if last_user:
-		try:
-			# prefer vector retrieval preview when available
-			if query_vector_rag is not None:
-				docs_and_scores = query_vector_rag(
-					last_user,
-					vector_index_name=VECTOR_INDEX_NAME,
-					vector_node_label=VECTOR_NODE_LABEL,
-					vector_source_property=VECTOR_SOURCE_PROPERTY,
-					vector_embedding_property=VECTOR_EMBEDDING_PROPERTY,
-					top_k=VECTOR_TOP_K,
-				)
-				if docs_and_scores:
-					snippets = []
-					for item in docs_and_scores:
-						try:
-							doc = item[0]
-							content = getattr(doc, "page_content", None) or getattr(doc, "content", None) or str(doc)
-						except Exception:
-							doc = item
-							content = getattr(doc, "page_content", None) or getattr(doc, "content", None) or str(doc)
-						snippets.append(content)
-					ctx = "\n\n".join(snippets)
-					st.write(ctx)
-				else:
-					st.write("(no matching nodes)")
-			else:
-				driver = get_driver()
-				nodes = search_nodes(driver, last_user)
-				ctx = build_context(nodes)
-				if ctx:
-					st.write(ctx)
-				else:
-					st.write("(no matching nodes)")
-		except Exception as e:
-			st.write(f"Neo4j error: {e}")
-	else:
-		st.write("No user message yet in this thread")
+ใช้ข้อมูลจาก Knowledge Graph ต่อไปนี้เพื่อตอบคำถาม:
+(Use the following information from the Knowledge Graph to answer the question)
+
+Context from Neo4j:
+{ctx if ctx else "ไม่พบข้อมูลที่เกี่ยวข้อง (No relevant information found)"}
+
+คำถามของผู้ใช้ (User's question):
+{user_input}
+
+คำแนะนำในการตอบ (Answer guidelines):
+- ถ้ามีข้อมูลใน context ให้ตอบโดยอ้างอิงข้อมูลนั้น (If context is available, use it to answer)
+- ตอบเป็นภาษาไทยถ้าคำถามเป็นภาษาไทย (Answer in Thai if question is in Thai)
+- ตอบเป็นภาษาอังกฤษถ้าคำถามเป็นภาษาอังกฤษ (Answer in English if question is in English)
+- เริ่มคำตอบด้วยการตอบตรงประเด็น แล้วให้รายละเอียดเพิ่มเติม (Start with direct answer, then elaborate)
+- ถ้าไม่มีข้อมูล ให้บอกว่าไม่พบข้อมูลและเสนอคำถามที่เกี่ยวข้อง (If no data, suggest related questions)
+
+คำตอบ (Answer):"""
+			
+			answer = ask_openrouter_requests(prompt, max_tokens=1024)
+			st.markdown(answer)
+	
+	resp = {"role": "assistant", "content": answer, "time": datetime.now().strftime("%Y-%m-%d %H:%M:%S")}
+	st.session_state.threads[tid]["messages"].append(resp)
+	st.rerun()
 
