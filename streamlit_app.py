@@ -106,10 +106,10 @@ def generate_embeddings_for_nodes(driver, limit=50):
 	# Process each label
 	for label in labels:
 		with driver.session(database=NEO4J_DB) as session:
-			# Find nodes without embeddings
+			# Find nodes without embeddings OR without embedding_text (need to regenerate)
 			query = f"""
 			MATCH (n:`{label}`)
-			WHERE n.embedding IS NULL
+			WHERE n.embedding IS NULL OR n.embedding_text IS NULL
 			RETURN id(n) as nodeId, properties(n) as props
 			LIMIT $limit
 			"""
