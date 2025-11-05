@@ -62,11 +62,19 @@ def get_driver():
 
 
 def search_nodes(driver, question: str, limit: int = 6) -> List[dict]:
+	"""
+	Search for nodes containing the question text in ANY string property.
+	This is more flexible than searching only specific properties like 'name' or 'text'.
+	"""
+	# Search across ALL properties of nodes (not just 'name' or 'text')
 	q = """
 	MATCH (n)
-	WHERE (n.name IS NOT NULL AND toLower(n.name) CONTAINS toLower($q))
-	   OR (n.text IS NOT NULL AND toLower(n.text) CONTAINS toLower($q))
-	RETURN n LIMIT $limit
+	WHERE any(prop IN keys(n) WHERE 
+		n[prop] IS NOT NULL AND 
+		toLower(toString(n[prop])) CONTAINS toLower($q)
+	)
+	RETURN n, labels(n) as node_labels
+	LIMIT $limit
 	"""
 	out = []
 	with driver.session(database=NEO4J_DB) as session:
@@ -75,6 +83,8 @@ def search_nodes(driver, question: str, limit: int = 6) -> List[dict]:
 			node = r.get("n")
 			try:
 				props = dict(node)
+				# Add labels to the props dict for debugging
+				props["__labels__"] = r.get("node_labels", [])
 			except Exception:
 				props = {}
 			out.append(props)
@@ -82,13 +92,37 @@ def search_nodes(driver, question: str, limit: int = 6) -> List[dict]:
 
 
 def build_context(nodes: List[dict]) -> str:
+	"""
+	Build context from node properties.
+	Tries common property names and falls back to all string properties.
+	"""
 	if not nodes:
 		return ""
 	pieces = []
 	for i, n in enumerate(nodes, 1):
-		name = n.get("name") or n.get("title") or f"node_{i}"
-		text = n.get("text") or n.get("description") or ""
-		pieces.append(f"{name}: {text}")
+		# Try common property names for title/name
+		name = (n.get("name") or n.get("title") or n.get("label") or 
+		        n.get("id") or f"node_{i}")
+		
+		# Try common property names for content/description
+		text_props = []
+		for key in ["text", "description", "content", "summary", "value"]:
+			if key in n and n[key]:
+				text_props.append(str(n[key]))
+		
+		# If no common text properties, include all string values (excluding labels and IDs)
+		if not text_props:
+			for key, val in n.items():
+				if key not in ["__labels__", "id", "name", "title"] and val and isinstance(val, str):
+					text_props.append(f"{key}: {val}")
+		
+		text = " | ".join(text_props) if text_props else ""
+		
+		# Include labels if available
+		labels = n.get("__labels__", [])
+		label_str = f" ({', '.join(labels)})" if labels else ""
+		
+		pieces.append(f"{name}{label_str}: {text}")
 	return "\n\n".join(pieces)
 
 
