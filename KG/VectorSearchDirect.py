@@ -245,7 +245,19 @@ def query_with_relationships(
                 for record in result:
                     node_props = dict(record["props"])
                     node_props["__labels__"] = record["labels"]
-                    node_props["__relationships__"] = record["relationships"]
+                    
+                    # Handle relationships - filter out None/empty entries
+                    raw_relationships = record["relationships"]
+                    if raw_relationships:
+                        # Filter out entries where type is None (happens when no relationships exist)
+                        filtered_rels = [
+                            rel for rel in raw_relationships 
+                            if rel and isinstance(rel, dict) and rel.get("type") is not None
+                        ]
+                        node_props["__relationships__"] = filtered_rels if filtered_rels else []
+                    else:
+                        node_props["__relationships__"] = []
+                    
                     node_props["__score__"] = record["score"]
                     all_results.append(node_props)
                     

@@ -254,7 +254,7 @@ def build_context(nodes: List[dict]) -> str:
 		# Add relationship information if available
 		relationships = n.get("__relationships__", [])
 		rel_info = []
-		if relationships:
+		if relationships and isinstance(relationships, list):
 			for rel in relationships:
 				if rel and isinstance(rel, dict):
 					rel_type = rel.get("type", "")
@@ -262,10 +262,14 @@ def build_context(nodes: List[dict]) -> str:
 					connected_node = rel.get("node", {})
 					connected_labels = rel.get("labels", [])
 					
+					# Skip if no relationship type or connected node
+					if not rel_type or not connected_node:
+						continue
+					
 					# Get meaningful info from connected node
 					connected_name = None
 					for key in ["Stelligence", "ชื่อ-นามสกุล", "ตำแหน่ง", "หน่วยงาน", "name", "title"]:
-						if key in connected_node and connected_node[key]:
+						if connected_node and key in connected_node and connected_node[key]:
 							connected_name = connected_node[key]
 							break
 					
