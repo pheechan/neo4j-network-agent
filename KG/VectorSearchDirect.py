@@ -230,15 +230,24 @@ def query_with_relationships(
                 
                 // For Position nodes: Get Person nodes and their ministries (2-hop)
                 // Pattern: Position <- work_as <- Person -> work_at -> Ministry
-                OPTIONAL MATCH (node)<-[:work_as]-(person:Person)-[:work_at|UNDER]->(ministry)
+                WITH node, score, outgoing, incoming
+                OPTIONAL MATCH (node)<-[:work_as]-(person:Person)-[r3:work_at|UNDER]->(ministry)
                 WHERE 'Position' IN labels(node)
                 WITH node, score, outgoing, incoming,
-                     collect(DISTINCT {
-                         type: 'person_ministry',
-                         direction: 'related',
-                         node: properties(person) + {ministry: properties(ministry).`ชื่อ` OR properties(ministry).name},
-                         labels: labels(person)
-                     }) as person_ministries
+                     collect(DISTINCT CASE 
+                         WHEN ministry IS NOT NULL THEN {
+                             type: 'person_ministry',
+                             direction: 'related',
+                             node: properties(person) + {
+                                 ministry: COALESCE(ministry.ชื่อ, ministry.name, ministry.title, 'Unknown')
+                             },
+                             labels: labels(person)
+                         }
+                         ELSE null
+                     END) as person_ministries_raw
+                
+                WITH node, score, outgoing, incoming,
+                     [x IN person_ministries_raw WHERE x IS NOT NULL] as person_ministries
                 
                 RETURN 
                     properties(node) as props,
