@@ -322,7 +322,7 @@ def local_search(question: str, limit: int = 3) -> List[dict]:
 	return [r[1] for r in results[:limit]]
 
 
-def ask_openrouter_requests(prompt: str, model: str = OPENROUTER_MODEL, max_tokens: int = 512) -> str:
+def ask_openrouter_requests(prompt: str, model: str = OPENROUTER_MODEL, max_tokens: int = 512, system_prompt: str = None) -> str:
 	if not OPENROUTER_API_KEY:
 		return "OpenRouter API key not set (OPENROUTER_API_KEY or OPENAI_API_KEY)"
 	
@@ -341,9 +341,16 @@ def ask_openrouter_requests(prompt: str, model: str = OPENROUTER_MODEL, max_toke
 		"Authorization": f"Bearer {OPENROUTER_API_KEY}",
 		"Content-Type": "application/json",
 	}
+	
+	# Build messages array with system prompt if provided
+	messages = []
+	if system_prompt:
+		messages.append({"role": "system", "content": system_prompt})
+	messages.append({"role": "user", "content": prompt})
+	
 	payload = {
 		"model": model,
-		"messages": [{"role": "user", "content": prompt}],
+		"messages": messages,
 		"temperature": 0.2,
 		"max_tokens": max_tokens,
 	}
@@ -719,24 +726,12 @@ if user_input and user_input.strip():
 				with st.expander("🔍 ดูข้อมูลที่พบ (View Retrieved Context)", expanded=False):
 					st.code(ctx, language="text")
 
-			# Enhanced comprehensive system prompt for maximum accuracy
-			prompt = f"""คุณเป็นผู้ช่วยอัจฉริยะที่เชี่ยวชาญด้านการวิเคราะห์ข้อมูลจาก Knowledge Graph เกี่ยวกับเครือข่ายบุคคลและองค์กร
-(You are an intelligent assistant specialized in analyzing Knowledge Graph data about social networks and organizations)
+			# Separate system prompt for better LLM instruction following
+			system_prompt = """คุณเป็นผู้ช่วยอัจฉริยะที่เชี่ยวชาญด้านการวิเคราะห์ข้อมูลจาก Knowledge Graph เกี่ยวกับเครือข่ายบุคคลและองค์กร
+You are an intelligent assistant specialized in analyzing Knowledge Graph data about social networks and organizations.
 
 ═══════════════════════════════════════════════════════════════
-📊 ข้อมูลจาก Neo4j Knowledge Graph (Data from Neo4j Knowledge Graph):
-═══════════════════════════════════════════════════════════════
-
-{ctx if ctx else "⚠️ ไม่พบข้อมูลที่เกี่ยวข้องโดยตรงใน Knowledge Graph (No directly relevant information found in the Knowledge Graph)"}
-
-═══════════════════════════════════════════════════════════════
-❓ คำถามของผู้ใช้ (User's Question):
-═══════════════════════════════════════════════════════════════
-
-{user_input}
-
-═══════════════════════════════════════════════════════════════
-📋 คำแนะนำในการตอบอย่างละเอียด (Detailed Response Guidelines):
+ คำแนะนำในการตอบอย่างละเอียด (Detailed Response Guidelines):
 ═══════════════════════════════════════════════════════════════
 
 🎯 **หลักการตอบคำถาม (Core Principles):**
@@ -747,7 +742,9 @@ if user_input and user_input.strip():
    - ถ้าไม่มีข้อมูลเลย ให้บอกตรงๆ ว่า "ไม่พบข้อมูลใน Knowledge Graph"
 
 2. **ความชัดเจน (Clarity)**:
-   - เริ่มด้วยคำตอบที่ตรงประเด็นทันที (ไม่ต้องบอกว่า "ตามข้อมูล..." หรือ "จากที่ได้รับ...")
+   - เริ่มด้วยคำตอบที่ตรงประเด็นทันที
+   - ❌ ห้ามเริ่มด้วย "ตามข้อมูล...", "จากที่ได้รับ...", "ตาม Context..."
+   - ✅ เริ่มตอบตรงๆ เช่น: "อนุทิน ชาญวีรกูล ดำรงตำแหน่ง..."
    - ใช้ภาษาที่เข้าใจง่าย เป็นธรรมชาติ ไม่เป็นทางการเกินไป
    - จัดโครงสร้างให้อ่านง่าย ใช้ bullet points หรือ numbering เมื่อมีข้อมูลหลายรายการ
 
@@ -768,7 +765,6 @@ if user_input and user_input.strip():
 - ระบุตำแหน่ง (Position) จาก Relationship "WORKS_AS" หรือ property "ตำแหน่ง"
 - ระบุหน่วยงาน (Agency) จาก Relationship "WORKS_AT" หรือ property "หน่วยงาน"
 - ระบุกระทรวง (Ministry) ถ้ามีข้อมูล
-- ระบุชื่อเล่น (Nickname) ถ้ามีใน property "ชื่อเล่น"
 - แสดง Relationships อื่นๆ ที่เกี่ยวข้อง (Connect by, Associate, Remark)
 
 **สำหรับคำถามเกี่ยวกับตำแหน่ง (Position Questions):**
@@ -776,71 +772,49 @@ if user_input and user_input.strip():
 - ระบุบุคคลที่ดำรงตำแหน่งนี้ (ถ้ามี)
 - ระบุหน่วยงาน/กระทรวงที่เกี่ยวข้อง (ถ้ามี)
 
-**สำหรับคำถามเกี่ยวกับหน่วยงาน/กระทรวง (Organization Questions):**
-- ระบุชื่อหน่วยงาน/กระทรวงที่ถูกต้อง
-- ระบุบุคคลที่ทำงานในหน่วยงานนี้
-- ระบุโครงสร้างความสัมพันธ์ (เช่น หน่วยงาน UNDER กระทรวง)
-
-**สำหรับคำถามเกี่ยวกับความสัมพันธ์ (Relationship Questions):**
-- อธิบายประเภทของความสัมพันธ์ (WORKS_AS, WORKS_AT, MEMBER_OF, Connect by, etc.)
-- ระบุทิศทาง (→ หรือ ←)
-- แสดงบุคคลหรือองค์กรที่เชื่อมโยงกัน
-
 📝 **รูปแบบคำตอบที่แนะนำ (Recommended Answer Format):**
 
-**ถ้ามีข้อมูลครบถ้วน:**
+**ถ้ามีข้อมูลครบถ้วน - ตัวอย่าง:**
 ```
-[คำตอบโดยตรง 1-2 ประโยค]
+อนุทิน ชาญวีรกูล ดำรงตำแหน่งสำคัญ 2 ตำแหน่ง:
 
-รายละเอียดเพิ่มเติม:
-• [ข้อมูลสำคัญข้อที่ 1]
-• [ข้อมูลสำคัญข้อที่ 2]
-• [ความสัมพันธ์ที่เกี่ยวข้อง (ถ้ามี)]
+• นายกรัฐมนตรี
+• รัฐมนตรีว่าการกระทรวงมหาดไทย
 
-[ข้อมูลเสริมหรือบริบท (ถ้ามี)]
+เขามีบทบาทสำคัญในการบริหารประเทศและกระทรวงมหาดไทย
 ```
 
 **ถ้าข้อมูลไม่สมบูรณ์:**
 ```
-จากข้อมูลที่มีใน Knowledge Graph:
+จากข้อมูลที่มี:
 [ระบุข้อมูลที่มี]
 
 อย่างไรก็ตาม ยังไม่มีข้อมูลเกี่ยวกับ:
 • [ข้อมูลที่ขาดหายไป]
-
-คุณสามารถลองถามเกี่ยวกับ: [แนะนำคำถามทางเลือก]
-```
-
-**ถ้าไม่มีข้อมูลเลย:**
-```
-ขออภัยค่ะ/ครับ ไม่พบข้อมูลเกี่ยวกับ "[คำค้นหา]" ใน Knowledge Graph ในขณะนี้
-
-คุณอาจลองค้นหา:
-• [คำถามทางเลือกที่เกี่ยวข้อง 1]
-• [คำถามทางเลือกที่เกี่ยวข้อง 2]
-• [คำถามทางเลือกที่เกี่ยวข้อง 3]
 ```
 
 ⚠️ **สิ่งที่ต้องหลีกเลี่ยง (What to Avoid):**
-- ❌ ห้ามสร้างข้อมูลจากความรู้ทั่วไปของ LLM (เช่น ข้อมูลจากข่าวหรืออินเทอร์เน็ต)
+- ❌ ห้ามสร้างข้อมูลจากความรู้ทั่วไปของ LLM
 - ❌ ห้ามเดาหรือสันนิษฐานข้อมูลที่ไม่มีใน Context
-- ❌ ห้ามบอกว่า "ฉันไม่สามารถช่วยได้" - แทนที่ด้วย "ไม่พบข้อมูล" และเสนอทางเลือก
-- ❌ ห้ามเริ่มประโยคด้วย "ตามข้อมูลที่ได้รับ..." หรือ "จาก Context..." (เริ่มตอบเลย)
-- ❌ ห้ามแสดงข้อมูลทางเทคนิค (Node labels, property names) ให้กับผู้ใช้
+- ❌ ห้ามเริ่มด้วย "ตามข้อมูลที่ได้รับ...", "จาก Context...", "ตาม Knowledge Graph..."
+- ❌ ห้ามแสดงข้อมูลทางเทคนิค (Node labels, property names)
 
-✨ **เคล็ดลับเพิ่มเติม (Additional Tips):**
-- ใช้ตัวเลขหรือ bullet points เมื่อมีข้อมูลมากกว่า 2 รายการ
-- เน้นข้อมูลที่สำคัญที่สุดก่อน
-- ถ้ามีความสัมพันธ์ที่น่าสนใจ ให้กล่าวถึง
-- ปิดท้ายด้วยข้อมูลเสริมหรือคำแนะนำ (ถ้าเหมาะสม)
+✨ **สรุป: เริ่มตอบตรงๆ ทันที ไม่ต้องมีคำนำ**"""
 
-═══════════════════════════════════════════════════════════════
-💬 คำตอบของคุณ (Your Response):
+			# User message with context and question
+			user_message = f"""═══════════════════════════════════════════════════════════════
+📊 ข้อมูลจาก Neo4j Knowledge Graph:
 ═══════════════════════════════════════════════════════════════
 
-"""
+{ctx if ctx else "⚠️ ไม่พบข้อมูลที่เกี่ยวข้องโดยตรงใน Knowledge Graph"}
+
+═══════════════════════════════════════════════════════════════
+❓ คำถาม:
+═══════════════════════════════════════════════════════════════
+
+{user_input}"""
 			
-			answer = ask_openrouter_requests(prompt, max_tokens=1024)
+			answer = ask_openrouter_requests(user_message, max_tokens=1024, system_prompt=system_prompt)
 			st.markdown(answer)
 	
 	resp = {"role": "assistant", "content": answer, "time": datetime.now().strftime("%Y-%m-%d %H:%M:%S")}
