@@ -753,6 +753,55 @@ if user_input and user_input.strip():
 						top_k_per_index=30,  # Increased to 30 for comprehensive Stelligence network coverage
 					)
 					
+					# Check if query mentions Stelligence network names and add direct query
+					stelligence_names = ["Santisook", "Por", "Knot"]
+					query_lower = user_input.lower()
+					matching_stelligence = [name for name in stelligence_names if name.lower() in query_lower]
+					
+					if matching_stelligence:
+						st.caption(f"🌐 Detected Stelligence network query - fetching all members...")
+						try:
+							driver = get_driver()
+							for stell_name in matching_stelligence:
+								# Query all people with this Stelligence value
+								cypher_query = """
+								MATCH (n:Person {Stelligence: $stelligence})
+								OPTIONAL MATCH (n)-[r]->(connected)
+								WITH n, collect(DISTINCT {
+									type: type(r), 
+									direction: 'outgoing',
+									node: properties(connected),
+									labels: labels(connected)
+								}) as outgoing
+								OPTIONAL MATCH (n)<-[r2]-(connected2)
+								WITH n, outgoing, collect(DISTINCT {
+									type: type(r2),
+									direction: 'incoming', 
+									node: properties(connected2),
+									labels: labels(connected2)
+								}) as incoming
+								RETURN properties(n) as props, labels(n) as labels, 
+								       outgoing + incoming as relationships
+								LIMIT 50
+								"""
+								stell_results = driver.session(database=NEO4J_DB).run(
+									cypher_query, 
+									stelligence=stell_name
+								)
+								
+								# Add to results
+								for record in stell_results:
+									node_dict = dict(record["props"])
+									node_dict["__labels__"] = record["labels"]
+									node_dict["__relationships__"] = record.get("relationships", [])
+									# Avoid duplicates
+									if not any(n.get("id") == node_dict.get("id") for n in results):
+										results.append(node_dict)
+								
+								st.caption(f"  ✅ Added {stell_name} network members")
+						except Exception as e:
+							st.warning(f"  ⚠️ Stelligence query error: {str(e)[:100]}")
+					
 					# results is List[dict] with __relationships__ included
 					if results and len(results) > 0:
 						st.caption(f"✅ Found {len(results)} nodes with relationship data")
