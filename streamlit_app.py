@@ -741,55 +741,26 @@ if user_input and user_input.strip():
 						if ctx.strip():
 							st.caption(f"✅ พบข้อมูล {len(results)} รายการพร้อมความสัมพันธ์ (Found {len(results)} nodes with relationships)")
 						else:
-							st.warning(f"⚠️ Vector search found nodes but context is empty. Trying Cypher fallback...")
-							driver = get_driver()
-							nodes = search_nodes(driver, user_input)
-							ctx = build_context(nodes)
-							if nodes:
-								st.caption(f"✅ พบข้อมูล {len(nodes)} รายการจาก Cypher (Found {len(nodes)} nodes)")
+							st.warning(f"⚠️ Vector search found nodes but context is empty")
+							# Don't fallback to Cypher - instead just inform no context
+							ctx = ""
 					else:
-						st.warning(f"⚠️ Vector search returned no results. Trying Cypher fallback...")
-						driver = get_driver()
-						nodes = search_nodes(driver, user_input)
-						ctx = build_context(nodes)
-						if nodes:
-							st.caption(f"✅ พบข้อมูล {len(nodes)} รายการจาก Cypher (Found {len(nodes)} nodes)")
-						else:
-							st.caption(f"❌ No results from Cypher search either")
+						st.warning(f"⚠️ Vector search returned no relevant results")
+						ctx = ""
 							
 				except Exception as e:
-					# fall back to simple cypher search if vector retrieval fails
-					st.warning(f"⚠️ Vector search error: {str(e)[:100]}... Trying Cypher fallback...")
-					try:
-						driver = get_driver()
-						nodes = search_nodes(driver, user_input)
-						ctx = build_context(nodes)
-						if nodes:
-							st.caption(f"✅ พบข้อมูล {len(nodes)} รายการจาก Cypher (Found {len(nodes)} nodes)")
-					except Exception as e2:
-						ctx = ""
-						st.error(f"Both vector and Cypher search failed. Vector error: {str(e)[:50]}, Cypher error: {str(e2)[:50]}")
-			else:
-				# query_vector_rag not available (package or import issue) — use cypher search
-				try:
-					driver = get_driver()
-					nodes = search_nodes(driver, user_input)
-					ctx = build_context(nodes)
-					
-					# Debug: show how many nodes were found
-					if nodes:
-						st.caption(f"✅ พบข้อมูล {len(nodes)} รายการจาก Neo4j (Found {len(nodes)} nodes)")
-					else:
-						st.caption(f"⚠️ ไม่พบข้อมูลที่ตรงกับคำค้นหา '{user_input}' (No matching nodes found)")
-						
-				except Exception as e:
+					# Show the actual error instead of falling back
+					st.error(f"⚠️ Vector search error: {str(e)}")
+					import traceback
+					st.code(traceback.format_exc())
 					ctx = ""
-					st.error(f"❌ Neo4j error: {e}")
+			else:
+				# Vector search module not available
+				st.error("❌ Vector search module not available. Please check dependencies.")
+				ctx = ""
 
-			# Don't use fallback docs if they're irrelevant to the query
-			# Only use fallback for demo/development when Neo4j is completely unavailable
-			if not ctx and not nodes:
-				# Check if we're in a real error state (can't connect) vs just no results
+			# Show info if no context found
+			if not ctx or not ctx.strip():
 				st.info("💡 ไม่พบข้อมูลที่เกี่ยวข้องใน Knowledge Graph / No relevant information found in the knowledge graph")
 				ctx = ""  # Let the LLM know there's no context
 			
