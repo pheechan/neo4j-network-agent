@@ -763,9 +763,12 @@ if user_input and user_input.strip():
 						try:
 							driver = get_driver()
 							for stell_name in matching_stelligence:
-								# Query all people with this Stelligence value
+								# Query all people with this Stelligence/Connect by value
+								# Check BOTH "Stelligence" property AND "Connect by" property
 								cypher_query = """
-								MATCH (n:Person {Stelligence: $stelligence})
+								MATCH (n:Person)
+								WHERE n.Stelligence = $stelligence 
+								   OR n.`Connect by` CONTAINS $stelligence
 								OPTIONAL MATCH (n)-[r]->(connected)
 								WITH n, collect(DISTINCT {
 									type: type(r), 
@@ -782,13 +785,14 @@ if user_input and user_input.strip():
 								}) as incoming
 								RETURN properties(n) as props, labels(n) as labels, 
 								       outgoing + incoming as relationships
-								LIMIT 50
+								LIMIT 100
 								"""
 								stell_results = driver.session(database=NEO4J_DB).run(
 									cypher_query, 
 									stelligence=stell_name
 								)
 								
+								added_count = 0
 								# Add to results
 								for record in stell_results:
 									node_dict = dict(record["props"])
@@ -797,8 +801,9 @@ if user_input and user_input.strip():
 									# Avoid duplicates
 									if not any(n.get("id") == node_dict.get("id") for n in results):
 										results.append(node_dict)
+										added_count += 1
 								
-								st.caption(f"  ✅ Added {stell_name} network members")
+								st.caption(f"  ✅ Added {added_count} {stell_name} network members")
 						except Exception as e:
 							st.warning(f"  ⚠️ Stelligence query error: {str(e)[:100]}")
 					
