@@ -358,6 +358,28 @@ def build_context(nodes: List[dict]) -> str:
 			node_str += "\n  Relationships: " + ", ".join(rel_info)
 		
 		pieces.append(node_str)
+	
+	# Post-process: Add Stelligence network summary at the top if present
+	stelligence_networks = {}
+	for n in nodes:
+		stelligence = n.get("Stelligence")
+		if stelligence and stelligence in ["Santisook", "Por", "Knot"]:
+			person_name = n.get("ชื่อ-นามสกุล") or n.get("name") or "Unknown"
+			if stelligence not in stelligence_networks:
+				stelligence_networks[stelligence] = []
+			stelligence_networks[stelligence].append(person_name)
+	
+	# Add summary if networks found
+	if stelligence_networks:
+		summary_parts = ["🌐 เครือข่าย Stelligence Networks:"]
+		for network_name, members in stelligence_networks.items():
+			summary_parts.append(f"\n  📍 {network_name} Network: {len(members)} คน")
+			summary_parts.append(f"     → {', '.join(members[:10])}")  # Show first 10
+			if len(members) > 10:
+				summary_parts.append(f"     → และอีก {len(members) - 10} คน...")
+		summary = "\n".join(summary_parts)
+		return summary + "\n\n" + "\n\n".join(pieces)
+	
 	return "\n\n".join(pieces)
 
 
@@ -725,10 +747,10 @@ if user_input and user_input.strip():
 			# Use relationship-aware vector search (gets nodes + their connections via WORKS_AS, etc.)
 			if VECTOR_SEARCH_AVAILABLE and query_with_relationships is not None:
 				try:
-					st.caption(f"🔍 Searching with relationships (Person → Position, Ministry, etc.)...")
+					st.caption(f"🔍 Searching with relationships (Person → Position, Ministry, Stelligence networks, etc.)...")
 					results = query_with_relationships(
 						user_input,
-						top_k_per_index=20,  # Increased to 20 for comprehensive Stelligence/Connect by queries
+						top_k_per_index=30,  # Increased to 30 for comprehensive Stelligence network coverage
 					)
 					
 					# results is List[dict] with __relationships__ included
