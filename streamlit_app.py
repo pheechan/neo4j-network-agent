@@ -256,8 +256,10 @@ def build_context(nodes: List[dict]) -> str:
 		rel_info = []
 		
 		# Extract ministry/agency from the PERSON node itself (primary source)
-		ministry_info = n.get("กระทรวง")  # Thai: Ministry property on Person node
-		agency_info = n.get("หน่วยงาน")   # Thai: Agency property on Person node
+		# Use a list to track if person is connected to MULTIPLE ministries
+		ministry_info = n.get("กระทรวง") if n.get("กระทรวง") else None  # From Person property
+		agency_info = n.get("หน่วยงาน") if n.get("หน่วยงาน") else None    # From Person property
+		ministry_from_relationship = None  # Track ministry from graph relationship
 		
 		if relationships and isinstance(relationships, list):
 			for rel in relationships:
@@ -278,18 +280,22 @@ def build_context(nodes: List[dict]) -> str:
 							connected_name = connected_node[key]
 							break
 					
-					# Check if this is Ministry or Agency info
+					# Check if this is Ministry or Agency info from relationship
 					if connected_labels and "Ministry" in connected_labels:
-						if not ministry_info:  # Only update if not already set from Person node
+						# Store ministry from relationship - will override property if needed
+						ministry_from_relationship = connected_name
+						if not ministry_info:  # Use relationship if no property exists
 							ministry_info = connected_name
 					elif connected_labels and "Agency" in connected_labels:
-						if not agency_info:  # Only update if not already set from Person node
+						if not agency_info:
 							agency_info = connected_name
 					elif connected_node.get("กระทรวง"):
-						if not ministry_info:  # Only update if not already set from Person node
+						if not ministry_from_relationship:  # Prefer actual Ministry node
+							ministry_from_relationship = connected_node.get("กระทรวง")
+						if not ministry_info:
 							ministry_info = connected_node.get("กระทรวง")
 					elif connected_node.get("หน่วยงาน"):
-						if not agency_info:  # Only update if not already set from Person node
+						if not agency_info:
 							agency_info = connected_node.get("หน่วยงาน")
 					
 					if connected_name:
@@ -300,8 +306,10 @@ def build_context(nodes: List[dict]) -> str:
 							# Enhance position name with ministry/agency from the PERSON node
 							enhanced_name = connected_name
 							
-							# Use ministry from Person node (already extracted above)
-							if ministry_info:
+							# Use ministry from Person node or relationship (already extracted above)
+							if ministry_from_relationship:
+								enhanced_name = f"{connected_name}กระทรวง{ministry_from_relationship}"
+							elif ministry_info:
 								enhanced_name = f"{connected_name}กระทรวง{ministry_info}"
 							elif agency_info:
 								enhanced_name = f"{connected_name} {agency_info}"
@@ -310,6 +318,12 @@ def build_context(nodes: List[dict]) -> str:
 								rel_info.append(f"{rel_type} → {enhanced_name}{label_str_conn}")
 							else:
 								rel_info.append(f"← {rel_type} ← {enhanced_name}{label_str_conn}")
+						# Always show Ministry relationships explicitly
+						elif "Ministry" in connected_labels:
+							if direction == "outgoing":
+								rel_info.append(f"🏛️ {rel_type} → {connected_name}{label_str_conn}")
+							else:
+								rel_info.append(f"🏛️ ← {rel_type} ← {connected_name}{label_str_conn}")
 						else:
 							# Standard relationship display
 							if direction == "outgoing":
@@ -320,9 +334,10 @@ def build_context(nodes: List[dict]) -> str:
 		# Combine node info with relationships
 		node_str = f"{name}{label_str}: {text}"
 		
-		# Add ministry/agency info if found in relationships
-		if ministry_info:
-			node_str += f"\n  กระทรวง: {ministry_info}"
+		# Add ministry/agency info - prefer relationship over property
+		display_ministry = ministry_from_relationship if ministry_from_relationship else ministry_info
+		if display_ministry:
+			node_str += f"\n  กระทรวง: {display_ministry}"
 		if agency_info:
 			node_str += f"\n  หน่วยงาน: {agency_info}"
 			
