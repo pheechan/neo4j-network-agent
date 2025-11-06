@@ -204,7 +204,6 @@ def query_with_relationships(
         for index_name in vector_indexes:
             try:
                 # Query that also fetches connected nodes via relationships
-                # Enhanced to include 2-hop for Position nodes (Position <- Person -> Ministry)
                 query = """
                 CALL db.index.vector.queryNodes($index_name, $top_k, $embedding)
                 YIELD node, score
@@ -228,31 +227,10 @@ def query_with_relationships(
                          labels: labels(connected2)
                      }) as incoming
                 
-                // For Position nodes: Get Person nodes and their ministries (2-hop)
-                // Pattern: Position <- work_as <- Person -> work_at -> Ministry
-                WITH node, score, outgoing, incoming
-                OPTIONAL MATCH (node)<-[:work_as]-(person:Person)-[r3:work_at|UNDER]->(ministry)
-                WHERE 'Position' IN labels(node)
-                WITH node, score, outgoing, incoming,
-                     collect(DISTINCT CASE 
-                         WHEN ministry IS NOT NULL THEN {
-                             type: 'person_ministry',
-                             direction: 'related',
-                             node: properties(person) + {
-                                 ministry: COALESCE(ministry.ชื่อ, ministry.name, ministry.title, 'Unknown')
-                             },
-                             labels: labels(person)
-                         }
-                         ELSE null
-                     END) as person_ministries_raw
-                
-                WITH node, score, outgoing, incoming,
-                     [x IN person_ministries_raw WHERE x IS NOT NULL] as person_ministries
-                
                 RETURN 
                     properties(node) as props,
                     labels(node) as labels,
-                    outgoing + incoming + person_ministries as relationships,
+                    outgoing + incoming as relationships,
                     score
                 ORDER BY score DESC
                 """
