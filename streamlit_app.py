@@ -260,6 +260,7 @@ def build_context(nodes: List[dict]) -> str:
 		ministry_info = n.get("กระทรวง") if n.get("กระทรวง") else None  # From Person property
 		agency_info = n.get("หน่วยงาน") if n.get("หน่วยงาน") else None    # From Person property
 		ministry_from_relationship = None  # Track ministry from graph relationship
+		person_ministry_list = []  # For Position nodes: track which Person works in which Ministry
 		
 		if relationships and isinstance(relationships, list):
 			for rel in relationships:
@@ -272,6 +273,14 @@ def build_context(nodes: List[dict]) -> str:
 					# Skip if no relationship type or connected node
 					if not rel_type or not connected_node:
 						continue
+					
+					# Handle special 2-hop relationship for Position nodes
+					if rel_type == "person_ministry":
+						person_name = connected_node.get("ชื่อ-นามสกุล") or connected_node.get("Stelligence")
+						person_ministry = connected_node.get("ministry")
+						if person_name and person_ministry:
+							person_ministry_list.append(f"{person_name} ({person_ministry})")
+						continue  # Don't process this as a normal relationship
 					
 					# Get meaningful info from connected node
 					connected_name = None
@@ -340,6 +349,10 @@ def build_context(nodes: List[dict]) -> str:
 			node_str += f"\n  กระทรวง: {display_ministry}"
 		if agency_info:
 			node_str += f"\n  หน่วยงาน: {agency_info}"
+		
+		# For Position nodes: show which Person holds this position and their ministry
+		if person_ministry_list:
+			node_str += f"\n  👥 ดำรงตำแหน่งโดย: " + ", ".join(person_ministry_list)
 			
 		if rel_info:
 			node_str += "\n  Relationships: " + ", ".join(rel_info)

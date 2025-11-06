@@ -867,6 +867,460 @@ Total Cost: ~$1-5 per month for moderate use
 
 ---
 
+## 🧪 Test Cases & Example Queries
+
+### Category 1: Person Information Queries
+
+#### Test Case 1.1: Simple Person Lookup
+**Query (Thai):** `อนุทิน ชาญวีรกูล ตำแหน่งอะไร`  
+**Query (English):** `What position does Anutin Charnvirakul hold?`
+
+**Expected Output:**
+```
+อนุทิน ชาญวีรกูล ดำรงตำแหน่งสำคัญ 2 ตำแหน่ง:
+
+• นายกรัฐมนตรี
+• รัฐมนตรีว่าการกระทรวงมหาดไทย
+
+ในฐานะนายกรัฐมนตรี เขามีบทบาทในการบริหารประเทศและนโยบายสำคัญ ขณะที่ตำแหน่งรัฐมนตรีว่าการกระทรวงมหาดไทยทำให้เขารับผิดชอบด้านการบริหารท้องถิ่นและความมั่นคงภายใน
+
+**คุณอาจสนใจ:**
+- มีใครในคณะรัฐมนตรีบ้าง?
+- รัฐมนตรีกระทรวงมหาดไทยมีหน้าที่อะไร?
+```
+
+**What to Check:**
+- ✅ Full position names with ministry (รัฐมนตรีว่าการกระทรวงมหาดไทย)
+- ✅ Separate bullet points on new lines
+- ✅ No preamble ("ตามข้อมูล...", "จาก Knowledge Graph...")
+- ✅ Follow-up questions included
+- ✅ Brief explanation of roles
+
+---
+
+#### Test Case 1.2: Person with Multiple Relationships
+**Query (Thai):** `ใครรู้จักกับ [person name]`  
+**Query (English):** `Who knows [person name]?`
+
+**Expected Behavior:**
+- Show people connected via "Connect by" relationship
+- Show people connected via "Associate" relationship
+- Include relationship context (colleague, friend, etc.)
+- List workplace/organization connections
+
+**What to Check:**
+- ✅ Lists all connected people
+- ✅ Shows relationship type (Connect by, Associate)
+- ✅ Includes organizational context
+- ✅ No duplicate entries
+
+---
+
+#### Test Case 1.3: Person by Nickname
+**Query (Thai):** `ใครชื่อเล่น [nickname]`  
+**Query (English):** `Who has the nickname [nickname]?`
+
+**Expected Behavior:**
+- Find person by "ชื่อเล่น" property
+- Display full name
+- Show positions and ministry
+- Show nickname in response
+
+**What to Check:**
+- ✅ Correct person identified
+- ✅ Full name displayed
+- ✅ Nickname mentioned in response
+
+---
+
+### Category 2: Position & Role Queries
+
+#### Test Case 2.1: Who Holds a Position
+**Query (Thai):** `ใครเป็นนายกรัฐมนตรี`  
+**Query (English):** `Who is the Prime Minister?`
+
+**Expected Output:**
+```
+นายกรัฐมนตรีคือ [ชื่อ-นามสกุล]
+
+ตำแหน่งอื่นๆ ที่ดำรงอยู่:
+• [ตำแหน่งอื่นพร้อมกระทรวง/หน่วยงาน]
+
+สังกัด: [กระทรวง/หน่วยงาน]
+
+**คุณอาจสนใจ:**
+- นายกรัฐมนตรีมีหน้าที่อะไรบ้าง?
+- มีรองนายกกี่คน?
+```
+
+**What to Check:**
+- ✅ Direct answer first
+- ✅ Additional positions listed
+- ✅ Ministry/agency shown
+- ✅ Follow-up questions relevant
+
+---
+
+#### Test Case 2.2: List All People in Position
+**Query (Thai):** `มีรัฐมนตรีกี่คน`  
+**Query (English):** `How many ministers are there?`
+
+**Expected Behavior:**
+- Count all people with "รัฐมนตรี" in position
+- List names with full ministry names
+- Show total count
+
+**What to Check:**
+- ✅ Accurate count
+- ✅ Full ministry names for each
+- ✅ Organized list format
+
+---
+
+#### Test Case 2.3: Position Description
+**Query (Thai):** `รัฐมนตรีว่าการกระทรวงมหาดไทยมีหน้าที่อะไร`  
+**Query (English):** `What are the responsibilities of the Minister of Interior?`
+
+**Expected Behavior:**
+- If stored in graph: Return stored description
+- If not stored: Politely state information not available
+- Suggest related queries
+
+**What to Check:**
+- ✅ Doesn't hallucinate if info not in graph
+- ✅ Provides what's available
+- ✅ Suggests alternative queries
+
+---
+
+### Category 3: Organization & Ministry Queries
+
+#### Test Case 3.1: People in Ministry
+**Query (Thai):** `มีใครบ้างในกระทรวงมหาดไทย`  
+**Query (English):** `Who works in the Ministry of Interior?`
+
+**Expected Behavior:**
+- List all people with "กระทรวง: มหาดไทย" property
+- Show their positions
+- Organize by hierarchy if possible
+
+**What to Check:**
+- ✅ Complete list of people
+- ✅ Positions shown clearly
+- ✅ No duplicates
+
+---
+
+#### Test Case 3.2: Ministry Structure
+**Query (Thai):** `กระทรวง[ชื่อกระทรวง]มีหน่วยงานอะไรบ้าง`  
+**Query (English):** `What agencies are under [Ministry name]?`
+
+**Expected Behavior:**
+- List agencies connected via UNDER relationship
+- Show agency names and types
+- Mention key people if available
+
+**What to Check:**
+- ✅ All related agencies listed
+- ✅ Relationship types clear
+- ✅ Hierarchical structure shown
+
+---
+
+#### Test Case 3.3: Organization Head
+**Query (Thai):** `ใครเป็นหัวหน้า[หน่วยงาน]`  
+**Query (English):** `Who heads [organization name]?`
+
+**Expected Behavior:**
+- Find person with highest position in org
+- Show full title and name
+- Include ministry/parent org context
+
+**What to Check:**
+- ✅ Correct person identified
+- ✅ Full organizational context
+- ✅ Position clearly stated
+
+---
+
+### Category 4: Relationship & Network Queries
+
+#### Test Case 4.1: Find Connections Between People
+**Query (Thai):** `[person A] รู้จัก [person B] ไหม`  
+**Query (English):** `Does [person A] know [person B]?`
+
+**Expected Behavior:**
+- Check for direct "Connect by" or "Associate" relationships
+- Check for indirect connections (same ministry, same position type)
+- Explain connection type
+
+**What to Check:**
+- ✅ Accurate relationship detection
+- ✅ Direct vs indirect clearly stated
+- ✅ Connection context explained
+
+---
+
+#### Test Case 4.2: Common Connections
+**Query (Thai):** `[person A] และ [person B] มีเพื่อนร่วมกันไหม`  
+**Query (English):** `Do [person A] and [person B] have mutual connections?`
+
+**Expected Behavior:**
+- Find people connected to both
+- List mutual connections
+- Show relationship types
+
+**What to Check:**
+- ✅ All mutual connections found
+- ✅ No false positives
+- ✅ Relationship context clear
+
+---
+
+#### Test Case 4.3: Network Path
+**Query (Thai):** `[person A] เชื่อมกับ [person B] ผ่านใคร`  
+**Query (English):** `How is [person A] connected to [person B]?`
+
+**Expected Behavior:**
+- Show shortest path if exists
+- List intermediate people/organizations
+- Explain each connection step
+
+**What to Check:**
+- ✅ Valid path found
+- ✅ Each step explained
+- ✅ Alternative paths mentioned if multiple
+
+---
+
+### Category 5: Complex & Multi-Part Queries
+
+#### Test Case 5.1: Compound Questions
+**Query (Thai):** `อนุทิน ชาญวีรกูล ทำงานที่ไหน ตำแหน่งอะไร และรู้จักกับใครบ้าง`  
+**Query (English):** `Where does Anutin work, what's his position, and who does he know?`
+
+**Expected Behavior:**
+- Answer all parts of question
+- Organize response by topic:
+  1. Workplace/Ministry
+  2. Position(s)
+  3. Known connections
+- Use clear section headers
+
+**What to Check:**
+- ✅ All parts answered
+- ✅ Well-organized structure
+- ✅ Complete information
+
+---
+
+#### Test Case 5.2: Comparison Questions
+**Query (Thai):** `เปรียบเทียบตำแหน่งของ [person A] และ [person B]`  
+**Query (English):** `Compare positions of [person A] and [person B]`
+
+**Expected Behavior:**
+- Show both people's positions
+- Highlight similarities (same ministry, similar level)
+- Note differences (different ministries, different roles)
+
+**What to Check:**
+- ✅ Fair comparison
+- ✅ Both people covered equally
+- ✅ Similarities and differences clear
+
+---
+
+#### Test Case 5.3: Aggregation Questions
+**Query (Thai):** `มีกี่คนในกระทรวงมหาดไทย`  
+**Query (English):** `How many people are in the Ministry of Interior?`
+
+**Expected Behavior:**
+- Count people with matching ministry property
+- Provide total number
+- Optionally list names if count is reasonable (<10)
+
+**What to Check:**
+- ✅ Accurate count
+- ✅ Clear number stated
+- ✅ Names listed if appropriate
+
+---
+
+### Category 6: Edge Cases & Error Handling
+
+#### Test Case 6.1: Person Not Found
+**Query (Thai):** `[non-existent person] ทำงานที่ไหน`  
+**Query (English):** `Where does [non-existent person] work?`
+
+**Expected Output:**
+```
+ขออภัย ไม่พบข้อมูลของ [person name] ในระบบ
+
+**คุณอาจลอง:**
+- ตรวจสอบการสะกดชื่อ
+- ใช้ชื่อเต็มแทนชื่อย่อ
+- ค้นหาด้วยตำแหน่งแทน เช่น "ใครเป็นรัฐมนตรี[กระทรวง]"
+```
+
+**What to Check:**
+- ✅ Polite "not found" message
+- ✅ Helpful suggestions
+- ✅ No hallucinated information
+
+---
+
+#### Test Case 6.2: Ambiguous Query
+**Query (Thai):** `รัฐมนตรี`  
+**Query (English):** `Minister`
+
+**Expected Behavior:**
+- Ask for clarification
+- Suggest specific queries
+- Show categories if possible
+
+**What to Check:**
+- ✅ Requests more details
+- ✅ Provides helpful examples
+- ✅ No assumptions made
+
+---
+
+#### Test Case 6.3: Empty/No Context
+**Query (Thai):** `[query that finds no relevant nodes]`
+
+**Expected Output:**
+```
+ขออภัย ไม่พบข้อมูลที่เกี่ยวข้องกับคำถามนี้
+
+**คุณอาจลองถามเกี่ยวกับ:**
+- ตำแหน่งของบุคคล เช่น "อนุทิน ชาญวีรกูล ตำแหน่งอะไร"
+- รายชื่อในหน่วยงาน เช่น "มีใครบ้างในกระทรวง[ชื่อ]"
+- ความสัมพันธ์ เช่น "[ชื่อ] รู้จักกับใครบ้าง"
+```
+
+**What to Check:**
+- ✅ Honest about no data
+- ✅ Suggests valid query types
+- ✅ No made-up information
+
+---
+
+### Category 7: Language & Formatting Tests
+
+#### Test Case 7.1: English Query
+**Query (English):** `What is Anutin Charnvirakul's position?`
+
+**Expected Behavior:**
+- Respond in English
+- Use Thai names for people/ministries
+- Translate position titles appropriately
+
+**What to Check:**
+- ✅ Response in English
+- ✅ Proper Thai name rendering
+- ✅ Clear translations
+
+---
+
+#### Test Case 7.2: Mixed Language
+**Query (Mixed):** `อนุทิน Charnvirakul ตำแหน่งอะไร`
+
+**Expected Behavior:**
+- Handle mixed Thai/English names
+- Respond in dominant language (Thai in this case)
+- Find person regardless of name format
+
+**What to Check:**
+- ✅ Person correctly identified
+- ✅ Language choice appropriate
+- ✅ Names normalized
+
+---
+
+#### Test Case 7.3: Special Characters & Spacing
+**Query (Thai):** `อนุทิน  ชาญวีรกูล   ตำแหน่ง อะไร` (extra spaces)
+
+**Expected Behavior:**
+- Handle extra whitespace gracefully
+- Find person despite spacing issues
+- Return normal formatted response
+
+**What to Check:**
+- ✅ Query processed correctly
+- ✅ No spacing errors in response
+- ✅ Accurate results
+
+---
+
+### Testing Checklist
+
+Before deploying changes, verify:
+
+**✅ Core Functionality**
+- [ ] Vector search returns relevant nodes
+- [ ] Relationships included in context
+- [ ] Ministry extracted from Person nodes
+- [ ] Position names enhanced with ministry
+
+**✅ Response Quality**
+- [ ] No preambles ("ตามข้อมูล...", "จาก Knowledge Graph...")
+- [ ] Full position names (not just "รัฐมนตรีว่าการ")
+- [ ] Bullet points on separate lines
+- [ ] Follow-up questions included
+- [ ] Brief explanations provided
+
+**✅ Error Handling**
+- [ ] Person not found → helpful message
+- [ ] No context → suggests alternatives
+- [ ] Ambiguous query → asks for clarification
+
+**✅ Performance**
+- [ ] Response time < 5 seconds
+- [ ] No timeout errors
+- [ ] Streaming works smoothly
+
+**✅ UI/UX**
+- [ ] Context viewer shows correct data
+- [ ] Chat history maintained
+- [ ] Mobile responsive
+- [ ] No console errors
+
+---
+
+### Quick Test Script
+
+Run these queries in sequence to validate system:
+
+```python
+test_queries = [
+    # Basic functionality
+    "อนุทิน ชาญวีรกูล ตำแหน่งอะไร",
+    "ใครเป็นนายกรัฐมนตรี",
+    "มีรัฐมนตรีกี่คน",
+    
+    # Relationships
+    "อนุทิน รู้จักกับใครบ้าง",
+    
+    # Organizations
+    "มีใครบ้างในกระทรวงมหาดไทย",
+    
+    # Error cases
+    "คนที่ไม่มีอยู่จริง ทำงานที่ไหน",
+    
+    # English
+    "What is Anutin's position?",
+]
+
+# Expected: All queries should:
+# 1. Return in < 5 seconds
+# 2. Show context in viewer
+# 3. Have no preambles
+# 4. Include follow-up questions
+# 5. Show full position names with ministry
+```
+
+---
+
 ## 🎯 Summary for Quick Reference
 
 ### Core Workflow (Simplified)

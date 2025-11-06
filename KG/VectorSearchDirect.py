@@ -204,11 +204,12 @@ def query_with_relationships(
         for index_name in vector_indexes:
             try:
                 # Query that also fetches connected nodes via relationships
+                # Enhanced to include 2-hop for Position nodes (Position <- Person -> Ministry)
                 query = """
                 CALL db.index.vector.queryNodes($index_name, $top_k, $embedding)
                 YIELD node, score
                 
-                // Get all relationships and connected nodes
+                // Get all 1-hop relationships and connected nodes
                 OPTIONAL MATCH (node)-[r]->(connected)
                 WITH node, score, 
                      collect(DISTINCT {
@@ -227,10 +228,22 @@ def query_with_relationships(
                          labels: labels(connected2)
                      }) as incoming
                 
+                // For Position nodes: Get Person nodes and their ministries (2-hop)
+                // Pattern: Position <- work_as <- Person -> work_at -> Ministry
+                OPTIONAL MATCH (node)<-[:work_as]-(person:Person)-[:work_at|UNDER]->(ministry)
+                WHERE 'Position' IN labels(node)
+                WITH node, score, outgoing, incoming,
+                     collect(DISTINCT {
+                         type: 'person_ministry',
+                         direction: 'related',
+                         node: properties(person) + {ministry: properties(ministry).`ชื่อ` OR properties(ministry).name},
+                         labels: labels(person)
+                     }) as person_ministries
+                
                 RETURN 
                     properties(node) as props,
                     labels(node) as labels,
-                    outgoing + incoming as relationships,
+                    outgoing + incoming + person_ministries as relationships,
                     score
                 ORDER BY score DESC
                 """
