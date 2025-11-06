@@ -728,7 +728,7 @@ if user_input and user_input.strip():
 					st.caption(f"🔍 Searching with relationships (Person → Position, Ministry, etc.)...")
 					results = query_with_relationships(
 						user_input,
-						top_k_per_index=15,  # Increased to 15 for comprehensive relationship queries
+						top_k_per_index=20,  # Increased to 20 for comprehensive Stelligence/Connect by queries
 					)
 					
 					# results is List[dict] with __relationships__ included
