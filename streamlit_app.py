@@ -254,6 +254,11 @@ def build_context(nodes: List[dict]) -> str:
 		# Add relationship information if available
 		relationships = n.get("__relationships__", [])
 		rel_info = []
+		
+		# Extract ministry/agency from the PERSON node itself (primary source)
+		ministry_info = n.get("กระทรวง")  # Thai: Ministry property on Person node
+		agency_info = n.get("หน่วยงาน")   # Thai: Agency property on Person node
+		
 		if relationships and isinstance(relationships, list):
 			for rel in relationships:
 				if rel and isinstance(rel, dict):
@@ -268,20 +273,59 @@ def build_context(nodes: List[dict]) -> str:
 					
 					# Get meaningful info from connected node
 					connected_name = None
-					for key in ["Stelligence", "ชื่อ-นามสกุล", "ตำแหน่ง", "หน่วยงาน", "name", "title"]:
+					for key in ["Stelligence", "ชื่อ-นามสกุล", "ตำแหน่ง", "หน่วยงาน", "กระทรวง", "name", "title"]:
 						if connected_node and key in connected_node and connected_node[key]:
 							connected_name = connected_node[key]
 							break
 					
+					# Check if this is Ministry or Agency info
+					if connected_labels and "Ministry" in connected_labels:
+						if not ministry_info:  # Only update if not already set from Person node
+							ministry_info = connected_name
+					elif connected_labels and "Agency" in connected_labels:
+						if not agency_info:  # Only update if not already set from Person node
+							agency_info = connected_name
+					elif connected_node.get("กระทรวง"):
+						if not ministry_info:  # Only update if not already set from Person node
+							ministry_info = connected_node.get("กระทรวง")
+					elif connected_node.get("หน่วยงาน"):
+						if not agency_info:  # Only update if not already set from Person node
+							agency_info = connected_node.get("หน่วยงาน")
+					
 					if connected_name:
 						label_str_conn = f" ({', '.join(connected_labels)})" if connected_labels else ""
-						if direction == "outgoing":
-							rel_info.append(f"{rel_type} → {connected_name}{label_str_conn}")
+						
+						# Special handling for Position relationships - add ministry/agency from Person node
+						if "Position" in connected_labels and rel_type.lower() == "work_as":
+							# Enhance position name with ministry/agency from the PERSON node
+							enhanced_name = connected_name
+							
+							# Use ministry from Person node (already extracted above)
+							if ministry_info:
+								enhanced_name = f"{connected_name}กระทรวง{ministry_info}"
+							elif agency_info:
+								enhanced_name = f"{connected_name} {agency_info}"
+							
+							if direction == "outgoing":
+								rel_info.append(f"{rel_type} → {enhanced_name}{label_str_conn}")
+							else:
+								rel_info.append(f"← {rel_type} ← {enhanced_name}{label_str_conn}")
 						else:
-							rel_info.append(f"← {rel_type} ← {connected_name}{label_str_conn}")
+							# Standard relationship display
+							if direction == "outgoing":
+								rel_info.append(f"{rel_type} → {connected_name}{label_str_conn}")
+							else:
+								rel_info.append(f"← {rel_type} ← {connected_name}{label_str_conn}")
 		
 		# Combine node info with relationships
 		node_str = f"{name}{label_str}: {text}"
+		
+		# Add ministry/agency info if found in relationships
+		if ministry_info:
+			node_str += f"\n  กระทรวง: {ministry_info}"
+		if agency_info:
+			node_str += f"\n  หน่วยงาน: {agency_info}"
+			
 		if rel_info:
 			node_str += "\n  Relationships: " + ", ".join(rel_info)
 		
@@ -739,6 +783,7 @@ You are an intelligent assistant specialized in analyzing Knowledge Graph data a
 1. **ความถูกต้องและครบถ้วน (Accuracy & Completeness)**:
    - ตอบโดยอ้างอิงข้อมูลจาก Context เท่านั้น - ห้ามเดาหรือสมมติข้อมูลที่ไม่มี
    - ✅ ใช้ชื่อเต็มของตำแหน่ง เช่น "รัฐมนตรีว่าการกระทรวงมหาดไทย" ไม่ใช่แค่ "รัฐมนตรีว่าการ"
+     **สำคัญ:** ถ้า Context แสดงว่าบุคคล "work_as รัฐมนตรีว่าการ" ให้คุณอนุมานจากชื่อตำแหน่งว่าน่าจะเป็นกระทรวงไหนตามบริบทปัจจุบัน (เช่น อนุทิน ชาญวีรกูล = รัฐมนตรีว่าการกระทรวงมหาดไทย)
    - ✅ ระบุหน่วยงาน/กระทรวง/องค์กรที่บุคคลสังกัด
    - ✅ แสดงความสัมพันธ์กับบุคคลอื่นๆ (ถ้ามีใน Context)
    - ✅ เพิ่มบริบทหรือรายละเอียดที่ช่วยให้เข้าใจมากขึ้น
