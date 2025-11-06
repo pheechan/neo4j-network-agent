@@ -725,10 +725,10 @@ if user_input and user_input.strip():
 			# Use relationship-aware vector search (gets nodes + their connections via WORKS_AS, etc.)
 			if VECTOR_SEARCH_AVAILABLE and query_with_relationships is not None:
 				try:
-					st.caption(f"🔍 Searching with relationships (Person → Position, Agency, etc.)...")
+					st.caption(f"🔍 Searching with relationships (Person → Position, Ministry, etc.)...")
 					results = query_with_relationships(
 						user_input,
-						top_k_per_index=3,  # Get 3 results from each index
+						top_k_per_index=5,  # Increased from 3 to 5 for better coverage
 					)
 					
 					# results is List[dict] with __relationships__ included
