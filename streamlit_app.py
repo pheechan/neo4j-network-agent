@@ -612,10 +612,8 @@ def apply_custom_css():
 			background-color: {hover_bg};
 		}}
 		
-		/* Hide Streamlit branding */
-		#MainMenu {{visibility: hidden;}}
+		/* Hide Streamlit branding but keep hamburger menu */
 		footer {{visibility: hidden;}}
-		header {{visibility: hidden;}}
 		
 		/* Divider */
 		hr {{
