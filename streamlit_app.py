@@ -507,11 +507,6 @@ def apply_custom_css():
 	
 	st.markdown(f"""
 	<style>
-		/* Apply default system font */
-		* {{
-			font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif !important;
-		}}
-		
 		/* Main container and all backgrounds */
 		.stApp {{
 			background-color: {main_bg} !important;
@@ -538,22 +533,6 @@ def apply_custom_css():
 			border-right: 1px solid {border_color};
 		}}
 		
-		/* Hide the keyboard arrow text in sidebar toggle buttons */
-		button[kind="header"] span,
-		button[kind="header"] p,
-		[data-testid="collapsedControl"] span,
-		[data-testid="collapsedControl"] p {{
-			display: none !important;
-		}}
-		
-		/* Replace with hamburger icon */
-		button[kind="header"]::before,
-		[data-testid="collapsedControl"]::before {{
-			content: "☰" !important;
-			font-size: 1.5rem !important;
-			display: inline-block !important;
-		}}
-		
 		[data-testid="stSidebar"] .stButton button {{
 			width: 100%;
 			background-color: transparent;
@@ -569,7 +548,7 @@ def apply_custom_css():
 		}}
 		
 		/* Text color */
-		.stMarkdown, p, span, div, label, input, textarea, button {{
+		.stMarkdown, p, span, div {{
 			color: {text_color};
 		}}
 		
