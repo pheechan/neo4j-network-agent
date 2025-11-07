@@ -470,8 +470,26 @@ st.markdown("""
 <style>
 	[data-testid="stSidebar"][aria-expanded="false"] {
 		display: block !important;
+		margin-left: 0px !important;
+	}
+	[data-testid="stSidebar"] {
+		display: block !important;
+	}
+	/* Force sidebar to always show */
+	section[data-testid="stSidebar"] {
+		display: block !important;
+		width: 21rem !important;
 	}
 </style>
+<script>
+	// Force expand sidebar on load
+	window.addEventListener('load', function() {
+		const sidebar = window.parent.document.querySelector('[data-testid="stSidebar"]');
+		if (sidebar) {
+			sidebar.setAttribute('aria-expanded', 'true');
+		}
+	});
+</script>
 """, unsafe_allow_html=True)
 
 # Custom CSS for ChatGPT-like styling
@@ -726,6 +744,13 @@ def render_messages_with_actions(messages: List[Dict], thread_id: int):
 # Get current thread
 tid = st.session_state.current_thread
 current_thread = st.session_state.threads[tid]
+
+# Add a note about sidebar if it's collapsed
+st.markdown("""
+<div style="background-color: #1a1f2e; padding: 1rem; border-radius: 0.5rem; margin-bottom: 1rem; text-align: center;">
+	👈 <strong>Click the arrow in the top-left corner to open the sidebar menu</strong>
+</div>
+""", unsafe_allow_html=True)
 
 # Show welcome message if no messages in thread
 if not current_thread["messages"]:
