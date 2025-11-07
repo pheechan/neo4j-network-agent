@@ -457,145 +457,129 @@ def ask_openrouter_requests(prompt: str, model: str = OPENROUTER_MODEL, max_toke
 		return f"OpenRouter request failed: {type(e).__name__} {e}"
 
 
-## Streamlit chat UI with ChatGPT-like design
+## Streamlit chat UI with modern dark design
 st.set_page_config(
 	page_title="STelligence Network Agent", 
 	layout="wide",  # Wide layout for proper left sidebar + center content
-	page_icon="🔮",
-	initial_sidebar_state="expanded"  # Show sidebar by default like ChatGPT
+	page_icon="⚡",
+	initial_sidebar_state="expanded"  # Show sidebar by default
 )
 
-# Initialize theme state
-if "theme" not in st.session_state:
-	st.session_state.theme = "dark"  # Default to dark mode
-
-# Custom CSS for ChatGPT-like styling with theme support
-theme_colors = {
-	"dark": {
-		"bg": "#343541",
-		"secondary_bg": "#444654",
-		"sidebar_bg": "#202123",
-		"sidebar_hover": "#2a2b32",
-		"text": "#ececf1",
-		"border": "#565869",
-		"user_msg": "#343541",
-		"assistant_msg": "#444654",
-		"input_bg": "#40414f",
-	},
-	"light": {
-		"bg": "#ffffff",
-		"secondary_bg": "#f7f7f8",
-		"sidebar_bg": "#f7f7f8",
-		"sidebar_hover": "#ececf1",
-		"text": "#000000",
-		"border": "#d1d5db",
-		"user_msg": "#f7f7f8",
-		"assistant_msg": "#ffffff",
-		"input_bg": "#ffffff",
-	}
-}
-
-colors = theme_colors[st.session_state.theme]
-
-st.markdown(f"""
+# Custom CSS for modern dark styling (no light mode)
+st.markdown("""
 <style>
 	/* Hide Streamlit branding */
-	#MainMenu {{visibility: hidden;}}
-	footer {{visibility: hidden;}}
-	header {{visibility: hidden;}}
+	#MainMenu {visibility: hidden;}
+	footer {visibility: hidden;}
+	header {visibility: hidden;}
 	
-	/* Main background */
-	.stApp {{
-		background-color: {colors['bg']};
-	}}
+	/* Main background - darker */
+	.stApp {
+		background-color: #0e1117;
+	}
 	
 	/* Adjust spacing for cleaner look */
-	.block-container {{
-		padding-top: 1rem;
-		padding-bottom: 1rem;
+	.block-container {
+		padding-top: 3rem;
+		padding-bottom: 2rem;
 		max-width: 48rem;
-	}}
+	}
 	
-	/* ChatGPT-style sidebar */
-	[data-testid="stSidebar"] {{
-		background-color: {colors['sidebar_bg']};
+	/* Modern dark sidebar */
+	[data-testid="stSidebar"] {
+		background-color: #1a1b1e;
 		padding-top: 1rem;
-	}}
+		border-right: 1px solid #2d2e33;
+	}
 	
-	[data-testid="stSidebar"] * {{
-		color: {colors['text']} !important;
-	}}
+	[data-testid="stSidebar"] * {
+		color: #e4e4e7 !important;
+	}
 	
-	[data-testid="stSidebar"] button {{
+	[data-testid="stSidebar"] button {
 		background-color: transparent;
-		border: 1px solid {colors['border']};
-		color: {colors['text']} !important;
-		border-radius: 0.375rem;
+		border: 1px solid #3a3b40;
+		color: #e4e4e7 !important;
+		border-radius: 0.5rem;
 		padding: 0.75rem;
 		text-align: left;
 		transition: all 0.2s;
-	}}
+		font-size: 0.9rem;
+	}
 	
-	[data-testid="stSidebar"] button:hover {{
-		background-color: {colors['sidebar_hover']};
-	}}
+	[data-testid="stSidebar"] button:hover {
+		background-color: #2a2b30;
+		border-color: #4a4b50;
+	}
 	
-	[data-testid="stSidebar"] hr {{
-		border-color: {colors['border']};
+	[data-testid="stSidebar"] hr {
+		border-color: #3a3b40;
 		margin: 1rem 0;
-	}}
+	}
 	
-	/* Chat messages - side by side layout */
-	.stChatMessage {{
+	/* Chat messages - darker */
+	.stChatMessage {
 		padding: 1.5rem;
 		border-radius: 0.5rem;
 		margin-bottom: 1rem;
-	}}
+		background-color: #1a1b1e;
+	}
 	
-	/* User message (right-aligned) */
-	[data-testid="stChatMessageContent"]:has(+ [data-testid="chatAvatarIcon-user"]) {{
-		background-color: {colors['user_msg']};
-		margin-left: auto;
-		margin-right: 0;
-	}}
+	/* User message */
+	.stChatMessage[data-testid*="user"] {
+		background-color: #1f2024;
+	}
 	
-	/* Assistant message (left-aligned) */
-	.stChatMessage[data-testid*="assistant"] {{
-		background-color: {colors['assistant_msg']};
-	}}
+	/* Assistant message */
+	.stChatMessage[data-testid*="assistant"] {
+		background-color: #1a1b1e;
+	}
 	
-	/* Chat input styling */
-	.stChatInput {{
+	/* Chat input styling - darker */
+	.stChatInput {
 		border-radius: 0.75rem;
-		border: 1px solid {colors['border']};
-		background-color: {colors['input_bg']};
-	}}
+		border: 1px solid #3a3b40;
+		background-color: #1a1b1e;
+	}
 	
-	.stChatInput textarea {{
-		background-color: {colors['input_bg']};
-		color: {colors['text']};
-	}}
-	
-	/* Style for thread buttons */
-	.thread-button {{
-		width: 100%;
-		text-align: left;
-		padding: 0.5rem;
-		margin-bottom: 0.25rem;
-	}}
+	.stChatInput textarea {
+		background-color: #1a1b1e;
+		color: #e4e4e7;
+		border: none;
+	}
 	
 	/* Title styling */
-	h1 {{
-		color: {colors['text']};
-		font-size: 1.5rem;
+	h1 {
+		color: #e4e4e7;
+		font-size: 2rem;
 		font-weight: 600;
+		text-align: center;
 		margin-bottom: 0.5rem;
-	}}
+	}
 	
 	/* Caption and text */
-	.stCaption, p {{
-		color: {colors['text']};
-	}}
+	.stCaption, p {
+		color: #a1a1aa;
+	}
+	
+	/* Center welcome message */
+	.welcome-container {
+		text-align: center;
+		padding: 2rem;
+		margin-top: 8rem;
+	}
+	
+	.welcome-title {
+		font-size: 2rem;
+		font-weight: 600;
+		color: #e4e4e7;
+		margin-bottom: 1rem;
+	}
+	
+	.welcome-subtitle {
+		font-size: 1rem;
+		color: #a1a1aa;
+	}
 </style>
 """, unsafe_allow_html=True)
 
@@ -610,11 +594,6 @@ if "threads" not in st.session_state:
 	}
 	st.session_state.current_thread = 1
 	st.session_state.thread_counter = 1
-
-# Initialize edit mode
-if "edit_mode" not in st.session_state:
-	st.session_state.edit_mode = False
-	st.session_state.edit_message_idx = None
 
 
 def new_thread(title: str = None):
@@ -643,11 +622,6 @@ def update_thread_title(tid: int, first_message: str):
 	if first_message:
 		title = first_message[:50] + ("..." if len(first_message) > 50 else "")
 		st.session_state.threads[tid]["title"] = title
-
-
-def toggle_theme():
-	"""Toggle between dark and light mode"""
-	st.session_state.theme = "light" if st.session_state.theme == "dark" else "dark"
 
 
 def clear_current_thread():
@@ -707,16 +681,8 @@ with st.sidebar:
 	
 	st.markdown("---")
 	
-	# Theme Toggle
-	theme_icon = "☀️" if st.session_state.theme == "dark" else "🌙"
-	theme_label = f"{theme_icon} {'Light Mode' if st.session_state.theme == 'dark' else 'Dark Mode'}"
-	
-	if st.button(theme_label, key="theme_toggle", use_container_width=True):
-		toggle_theme()
-		st.rerun()
-	
 	# Clear Current Chat
-	if st.button("🧹 Clear Current Chat", key="clear_thread", use_container_width=True):
+	if st.button("Clear Current Chat", key="clear_thread", use_container_width=True):
 		clear_current_thread()
 		st.rerun()
 	
@@ -865,93 +831,38 @@ OPTIONS {indexConfig: {
 
 
 def render_messages_with_actions(messages: List[Dict], thread_id: int):
-	"""Render messages in ChatGPT style with edit/regenerate actions"""
+	"""Render messages in clean style without action buttons"""
 	for idx, m in enumerate(messages):
 		role = m.get("role")
 		content = m.get("content")
 		
 		if role == "user":
-			with st.chat_message("user", avatar="👤"):
+			with st.chat_message("user"):
 				st.markdown(content)
-				
-				# Action buttons for user messages (edit functionality)
-				col1, col2, col3 = st.columns([1, 1, 8])
-				with col1:
-					if st.button("✏️", key=f"edit-{thread_id}-{idx}", help="Edit message"):
-						st.session_state.edit_mode = True
-						st.session_state.edit_message_idx = idx
-						st.rerun()
-				with col2:
-					if st.button("🔄", key=f"regen-{thread_id}-{idx}", help="Regenerate from here"):
-						# Remove messages after this point and regenerate
-						st.session_state.threads[thread_id]["messages"] = messages[:idx+1]
-						# Remove the assistant response if it exists
-						if len(st.session_state.threads[thread_id]["messages"]) > idx + 1:
-							st.session_state.threads[thread_id]["messages"] = st.session_state.threads[thread_id]["messages"][:idx+1]
-						st.session_state.regenerate_from = content
-						st.rerun()
 		else:
-			with st.chat_message("assistant", avatar="🔮"):
+			with st.chat_message("assistant"):
 				st.markdown(content)
 
 
-# Main chat interface - ChatGPT style
-st.markdown("# 🔮 STelligence Network Agent")
-st.caption("Ask anything about the knowledge network • Powered by Neo4j Graph Database")
-
-# Show info about embeddings on first visit
-if "shown_embeddings_info" not in st.session_state:
-	st.info("ℹ️ **Using free HuggingFace embeddings** - First query may take ~30s to download the model (one-time). Subsequent queries will be fast!")
-	st.session_state.shown_embeddings_info = True
-
+# Main chat interface
 # Get current thread
 tid = st.session_state.current_thread
 current_thread = st.session_state.threads[tid]
 
-# Handle edit mode
-if st.session_state.edit_mode and st.session_state.edit_message_idx is not None:
-	st.info("✏️ **Edit Mode** - Modify your message below and press Enter to resend")
-	
-	# Get the message to edit
-	edit_idx = st.session_state.edit_message_idx
-	original_message = current_thread["messages"][edit_idx]["content"]
-	
-	# Show editable text area
-	edited_text = st.text_area(
-		"Edit your message:",
-		value=original_message,
-		height=100,
-		key="edit_textarea"
-	)
-	
-	col1, col2 = st.columns([1, 4])
-	with col1:
-		if st.button("✅ Send Edited", type="primary"):
-			if edited_text.strip():
-				# Remove messages from edit point onwards
-				current_thread["messages"] = current_thread["messages"][:edit_idx]
-				# Add edited message
-				st.session_state.edit_mode = False
-				st.session_state.edit_message_idx = None
-				st.session_state.regenerate_from = edited_text.strip()
-				st.rerun()
-	with col2:
-		if st.button("❌ Cancel"):
-			st.session_state.edit_mode = False
-			st.session_state.edit_message_idx = None
-			st.rerun()
-
-# Render conversation history
-render_messages_with_actions(current_thread["messages"], tid)
-
-# Check if we need to regenerate from an edited message
-if "regenerate_from" in st.session_state and st.session_state.regenerate_from:
-	user_input = st.session_state.regenerate_from
-	st.session_state.regenerate_from = None
-	# Process as new input below
+# Show welcome message if no messages in thread
+if not current_thread["messages"]:
+	st.markdown("""
+	<div class="welcome-container">
+		<div class="welcome-title">Start your conversation</div>
+		<div class="welcome-subtitle">Ask me anything about the knowledge network</div>
+	</div>
+	""", unsafe_allow_html=True)
 else:
-	# Chat input at the bottom (ChatGPT style)
-	user_input = st.chat_input("💬 Send a message... (ส่งข้อความ...)", key="chat_input")
+	# Render conversation history
+	render_messages_with_actions(current_thread["messages"], tid)
+
+# Chat input at the bottom
+user_input = st.chat_input("Send a message...", key="chat_input")
 
 if user_input and user_input.strip():
 	# Append user message
