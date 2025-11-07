@@ -509,19 +509,21 @@ def apply_custom_css():
 	<style>
 		/* Import Anuphan font from Google Fonts */
 		@import url('https://fonts.googleapis.com/css2?family=Anuphan:wght@300;400;500;600;700&display=swap');
-		/* Import Material Icons for symbols */
-		@import url('https://fonts.googleapis.com/css2?family=Material+Icons');
-		@import url('https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:opsz,wght,FILL,GRAD@20..48,100..700,0..1,-50..200');
 		
-		/* Apply font globally with fallback */
+		/* Apply font globally but exclude Material Icons elements */
 		* {{
-			font-family: 'Anuphan', 'Material Symbols Outlined', 'Material Icons', -apple-system, BlinkMacSystemFont, sans-serif !important;
+			font-family: 'Anuphan', -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif !important;
+		}}
+		
+		/* Keep Material Icons for icon elements */
+		.material-icons, [class*="material-"], button[kind="header"], [data-testid="collapsedControl"] {{
+			font-family: 'Material Icons', 'Material Symbols Outlined', sans-serif !important;
 		}}
 		
 		/* Main container and all backgrounds */
 		.stApp {{
 			background-color: {main_bg} !important;
-			font-family: 'Anuphan', 'Material Symbols Outlined', 'Material Icons', sans-serif !important;
+			font-family: 'Anuphan', sans-serif !important;
 		}}
 		
 		/* Header area */
@@ -559,10 +561,15 @@ def apply_custom_css():
 			background-color: {hover_bg};
 		}}
 		
-		/* Text color and font with fallback */
-		.stMarkdown, p, span, div, label, input, textarea, button {{
+		/* Text color and font */
+		.stMarkdown, p, span, div, label, input, textarea {{
 			color: {text_color};
-			font-family: 'Anuphan', 'Material Symbols Outlined', 'Material Icons', sans-serif !important;
+			font-family: 'Anuphan', sans-serif !important;
+		}}
+		
+		/* Keep default font for buttons with icons */
+		button {{
+			color: {text_color};
 		}}
 		
 		/* Left-right chat layout */
