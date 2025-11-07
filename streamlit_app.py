@@ -496,12 +496,12 @@ st.markdown("""
 def apply_custom_css():
 	# Swap colors: darker sidebar like ChatGPT, lighter main area
 	sidebar_bg = "#0d1117"  # Very dark like ChatGPT sidebar
-	main_bg = "#212121"     # Lighter than sidebar
+	main_bg = "#111827"     # Updated background color
 	text_color = "#ececec"
 	border_color = "#3d4451"
 	input_bg = "#2f2f2f"
 	user_msg_bg = "#2f2f2f"
-	assistant_msg_bg = "#212121"
+	assistant_msg_bg = "#1f2937"
 	hover_bg = "#374151"
 	button_color = "#565869"
 	
@@ -684,6 +684,12 @@ if "threads" not in st.session_state:
 	st.session_state.current_thread = 1
 	st.session_state.thread_counter = 1
 
+# Initialize edit mode state
+if "edit_mode" not in st.session_state:
+	st.session_state.edit_mode = None  # Will store (thread_id, message_index) when editing
+if "edit_text" not in st.session_state:
+	st.session_state.edit_text = ""
+
 
 def new_thread(title: str = None):
 	"""Create a new conversation thread"""
@@ -779,8 +785,38 @@ def render_messages_with_actions(messages: List[Dict], thread_id: int):
 		content = m.get("content")
 		
 		if role == "user":
-			with st.chat_message("user"):
-				st.markdown(content)
+			# Check if this message is being edited
+			if st.session_state.edit_mode == (thread_id, idx):
+				with st.chat_message("user"):
+					# Show text area for editing
+					edited_text = st.text_area(
+						"Edit your message:",
+						value=content,
+						key=f"edit_input_{thread_id}_{idx}",
+						height=100
+					)
+					col1, col2 = st.columns(2)
+					with col1:
+						if st.button("💾 Save & Resend", key=f"save_{thread_id}_{idx}", use_container_width=True):
+							# Update the message
+							st.session_state.threads[thread_id]["messages"][idx]["content"] = edited_text
+							# Remove all messages after this one
+							st.session_state.threads[thread_id]["messages"] = st.session_state.threads[thread_id]["messages"][:idx+1]
+							# Exit edit mode
+							st.session_state.edit_mode = None
+							# Rerun to process the edited message
+							st.rerun()
+					with col2:
+						if st.button("❌ Cancel", key=f"cancel_{thread_id}_{idx}", use_container_width=True):
+							st.session_state.edit_mode = None
+							st.rerun()
+			else:
+				with st.chat_message("user"):
+					st.markdown(content)
+					# Add edit button for user messages
+					if st.button("✏️", key=f"edit_user_{thread_id}_{idx}", help="Edit message"):
+						st.session_state.edit_mode = (thread_id, idx)
+						st.rerun()
 		else:
 			with st.chat_message("assistant"):
 				st.markdown(content)
@@ -788,8 +824,11 @@ def render_messages_with_actions(messages: List[Dict], thread_id: int):
 				# Add small action buttons below assistant messages
 				col1, col2, col3 = st.columns([1, 1, 10])
 				with col1:
-					if st.button("✏️", key=f"edit_{thread_id}_{idx}", help="Edit", use_container_width=True):
-						st.info("Edit functionality coming soon!")
+					if st.button("✏️", key=f"edit_{thread_id}_{idx}", help="Edit previous message", use_container_width=True):
+						# Find the previous user message
+						if idx > 0 and messages[idx-1].get("role") == "user":
+							st.session_state.edit_mode = (thread_id, idx-1)
+							st.rerun()
 				with col2:
 					if st.button("🔄", key=f"regen_{thread_id}_{idx}", help="Regenerate", use_container_width=True):
 						# Remove this message and regenerate
@@ -817,6 +856,17 @@ else:
 # Chat input at the bottom
 user_input = st.chat_input("Send a message...", key="chat_input")
 
+# Check if we need to process an edited message (last message is user message without response)
+process_message = None
+if (current_thread["messages"] and 
+    current_thread["messages"][-1]["role"] == "user" and
+    not user_input):
+	# Check if this is a newly edited message (no assistant response after it)
+	# This happens after the edit and rerun
+	if len(current_thread["messages"]) == 1 or current_thread["messages"][-2]["role"] == "assistant":
+		# This is a user message that needs processing
+		process_message = current_thread["messages"][-1]["content"]
+
 if user_input and user_input.strip():
 	# Append user message
 	msg = {"role": "user", "content": user_input.strip(), "time": datetime.now().strftime("%Y-%m-%d %H:%M:%S")}
@@ -826,9 +876,13 @@ if user_input and user_input.strip():
 	if len(current_thread["messages"]) == 1:
 		update_thread_title(tid, user_input.strip())
 	
-	# Display user message immediately
-	with st.chat_message("user", avatar="👤"):
-		st.markdown(user_input.strip())
+	process_message = user_input.strip()
+
+if process_message:
+	# Display user message immediately if it's new input
+	if user_input:
+		with st.chat_message("user", avatar="👤"):
+			st.markdown(process_message)
 
 	# Query neo4j for context and call model
 	with st.chat_message("assistant", avatar="🔮"):
@@ -842,13 +896,13 @@ if user_input and user_input.strip():
 				try:
 					st.caption(f"🔍 Searching across all indexes (Person, Position, Ministry, Agency, Remark, Connect by)...")
 					results = query_with_relationships(
-						user_input,
+						process_message,
 						top_k_per_index=30,  # Increased to 30 for comprehensive Stelligence network coverage
 					)
 					
 					# Check if query mentions Stelligence network names and add direct query
 					stelligence_names = ["Santisook", "Por", "Knot"]
-					query_lower = user_input.lower()
+					query_lower = process_message.lower()
 					matching_stelligence = [name for name in stelligence_names if name.lower() in query_lower]
 					
 					if matching_stelligence:
@@ -1240,7 +1294,7 @@ Q: "อนุทิน ชาญวีรกูล ตำแหน่งอะ�
 ❓ คำถาม:
 ═══════════════════════════════════════════════════════════════
 
-{user_input}
+{process_message}
 
 💡 หมายเหตุ: วิเคราะห์ข้อมูลทั้งหมดใน Context และจัดกลุ่มให้เหมาะกับคำถาม"""
 			
