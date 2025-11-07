@@ -628,11 +628,11 @@ def clear_current_thread():
 
 with st.sidebar:
 	# Header with logo and title
-	st.markdown("### � STelligence Network Agent")
+	st.markdown("### STelligence Network Agent")
 	st.caption("Powered by Neo4j Knowledge Graph")
 	
 	# New Chat button (prominent)
-	if st.button("➕ New Chat", key="new_chat", use_container_width=True, type="primary"):
+	if st.button("+ New Chat", key="new_chat", use_container_width=True, type="primary"):
 		new_thread()
 		st.rerun()
 	
@@ -654,8 +654,7 @@ with st.sidebar:
 		with col1:
 			# Highlight active thread
 			button_type = "primary" if tid == st.session_state.current_thread else "secondary"
-			thread_icon = "💬" if meta["messages"] else "📝"
-			thread_label = f"{thread_icon} {meta['title']}"
+			thread_label = meta['title']
 			
 			if st.button(
 				thread_label,
@@ -670,158 +669,16 @@ with st.sidebar:
 		with col2:
 			# Delete button (only show if not current thread and more than 1 thread exists)
 			if len(st.session_state.threads) > 1:
-				if st.button("🗑️", key=f"del-{tid}", help="Delete conversation"):
+				if st.button("X", key=f"del-{tid}", help="Delete conversation"):
 					delete_thread(tid)
 					st.rerun()
 	
 	st.markdown("---")
 	
-	# Clear Current Chat
-	if st.button("Clear Current Chat", key="clear_thread", use_container_width=True):
-		clear_current_thread()
-		st.rerun()
-	
-	st.markdown("---")
-	st.markdown("**Settings**")
-	with st.expander("Configuration"):
+	# Settings at bottom
+	with st.expander("Settings"):
 		st.caption(f"**Model:** {OPENROUTER_MODEL}")
 		st.caption(f"**Database:** {NEO4J_DB}")
-		st.caption(f"**Neo4j URI:** {NEO4J_URI[:35]}...")
-	
-	st.markdown("---")
-	st.markdown("**�️ Admin Tools**")
-	
-	if EMBEDDINGS_AVAILABLE:
-		if st.button("⚡ Generate Embeddings", key="gen_embeddings", use_container_width=True, help="Generate embeddings for nodes without them"):
-			with st.spinner("Generating embeddings..."):
-				try:
-					driver = get_driver()
-					success, total, errors = generate_embeddings_for_nodes(driver, limit=100)
-					driver.close()
-					
-					if success > 0:
-						st.success(f"✅ Generated {success} embeddings (processed {total} nodes)")
-					else:
-						st.warning(f"⚠️ No embeddings generated (processed {total} nodes)")
-					
-					if errors:
-						with st.expander("⚠️ Errors"):
-							for err in errors[:10]:
-								st.caption(err)
-				except Exception as e:
-					st.error(f"Error: {e}")
-	else:
-		st.caption("⚠️ HuggingFace embeddings not installed")
-		st.caption("Run: `pip install langchain-huggingface sentence-transformers`")
-	
-	st.markdown("---")
-	st.markdown("**🔍 Database Debug**")
-	
-	if st.button("📊 Check Database Status", key="check_db", use_container_width=True):
-		with st.spinner("Checking database..."):
-			try:
-				driver = get_driver()
-				with driver.session(database=NEO4J_DB) as session:
-					# Check for vector indexes
-					st.markdown("**Vector Indexes:**")
-					result = session.run("SHOW INDEXES WHERE type = 'VECTOR'")
-					indexes = list(result)
-					if indexes:
-						for idx in indexes:
-							st.caption(f"✅ {idx.get('name')} - {idx.get('labelsOrTypes')}")
-					else:
-						st.warning("⚠️ No vector indexes found!")
-						st.caption("Create indexes in Neo4j Browser:")
-						st.code("""CREATE VECTOR INDEX person_vector_index IF NOT EXISTS
-FOR (n:Person) ON n.embedding
-OPTIONS {indexConfig: {
-  `vector.dimensions`: 384,
-  `vector.similarity_function`: 'cosine'
-}};""", language="cypher")
-					
-					# Check for nodes with embeddings
-					st.markdown("**Nodes with Embeddings:**")
-					result = session.run("""
-						MATCH (n)
-						WHERE n.embedding IS NOT NULL
-						RETURN labels(n)[0] as label, count(n) as count
-						ORDER BY count DESC
-						LIMIT 10
-					""")
-					nodes_with_emb = list(result)
-					if nodes_with_emb:
-						for record in nodes_with_emb:
-							st.caption(f"✅ {record['label']}: {record['count']} nodes")
-					else:
-						st.warning("⚠️ No nodes have embeddings! Click 'Generate Embeddings' above.")
-					
-					# Check for nodes with embedding_text
-					st.markdown("**Nodes with embedding_text:**")
-					result = session.run("""
-						MATCH (n)
-						WHERE n.embedding_text IS NOT NULL
-						RETURN labels(n)[0] as label, count(n) as count
-						ORDER BY count DESC
-						LIMIT 10
-					""")
-					nodes_with_text = list(result)
-					if nodes_with_text:
-						for record in nodes_with_text:
-							st.caption(f"📝 {record['label']}: {record['count']} nodes")
-					else:
-						st.warning("⚠️ No nodes have embedding_text! Click 'Generate Embeddings' to add it.")
-					
-					# Check for Santisook label specifically
-					st.markdown("**Santisook Label Nodes:**")
-					result = session.run("""
-						MATCH (n:Santisook)
-						RETURN n.Stelligence as stelligence,
-						       n.embedding IS NOT NULL as has_embedding,
-						       n.embedding_text as embedding_text,
-						       keys(n) as properties
-						LIMIT 3
-					""")
-					santisook_label = list(result)
-					if santisook_label:
-						for record in santisook_label:
-							emb = "✅" if record['has_embedding'] else "❌"
-							txt = "📝" if record['embedding_text'] else "❌"
-							props = ', '.join([p for p in record['properties'] if p not in ['embedding', 'embedding_text']])
-							st.caption(f"{emb} Emb | {txt} Text | Stelligence: {record['stelligence']} | Props: {props}")
-					else:
-						st.caption("No Santisook label nodes found")
-					
-					# Test Search
-					st.markdown("**Test Search (Santisook):**")
-					result = session.run("""
-						MATCH (n)
-						WHERE any(prop IN keys(n) WHERE 
-							prop <> 'embedding' AND 
-							prop <> 'embedding_text' AND
-							n[prop] IS NOT NULL AND 
-							(
-								(valueType(n[prop]) = 'STRING' AND toLower(n[prop]) CONTAINS 'santisook') OR
-								(valueType(n[prop]) = 'INTEGER' AND toString(n[prop]) CONTAINS 'santisook')
-							)
-						)
-						RETURN labels(n) as labels, n.Stelligence as stelligence, 
-						       n.`ชื่อ-นามสกุล` as name, n.embedding IS NOT NULL as has_embedding,
-						       n.embedding_text IS NOT NULL as has_text
-						LIMIT 3
-					""")
-					santisook_nodes = list(result)
-					if santisook_nodes:
-						for record in santisook_nodes:
-							name_val = record['stelligence'] or record['name'] or "N/A"
-							emb_status = "✅" if record['has_embedding'] else "❌"
-							text_status = "📝" if record.get('has_text') else "❌"
-							st.caption(f"{emb_status} Embedding | {text_status} Text | {record['labels']} - {name_val}")
-					else:
-						st.warning("⚠️ No nodes found with 'Santisook'!")
-				
-				driver.close()
-			except Exception as e:
-				st.error(f"Error: {str(e)[:200]}")
 
 
 def render_messages_with_actions(messages: List[Dict], thread_id: int):
