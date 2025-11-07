@@ -889,7 +889,9 @@ def render_messages_with_actions(messages: List[Dict], thread_id: int):
 						st.rerun()
 		else:
 			with st.chat_message("assistant"):
-				st.markdown(content)
+				# Apply bullet formatting fix when displaying
+				fixed_content = fix_bullet_formatting(content)
+				st.markdown(fixed_content)
 				
 				# Add small action buttons below assistant messages
 				col1, col2, col3 = st.columns([1, 1, 10])
@@ -1391,7 +1393,7 @@ Q: "อนุทิน ชาญวีรกูล ตำแหน่งอะ�
 			
 			st.markdown(answer)
 	
-	# Save assistant response
+	# Save assistant response with FIXED formatting
 	resp = {"role": "assistant", "content": answer, "time": datetime.now().strftime("%Y-%m-%d %H:%M:%S")}
 	current_thread["messages"].append(resp)
 	st.rerun()
