@@ -969,7 +969,7 @@ if process_message:
 					st.caption(f"🔍 Searching across all indexes (Person, Position, Ministry, Agency, Remark, Connect by)...")
 					results = query_with_relationships(
 						process_message,
-						top_k_per_index=15,  # 15 nodes × 4 indexes = 60 results - balanced and efficient
+						top_k_per_index=60,  # 60 nodes × 4 indexes = 240 results - comprehensive coverage
 					)
 					
 					# Check if query mentions Stelligence network names and add direct query
