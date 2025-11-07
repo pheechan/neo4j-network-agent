@@ -192,23 +192,37 @@ def detect_query_intent(query: str) -> dict:
 
 def find_connection_path(person_a: str, person_b: str, max_hops: int = 3) -> dict:
 	"""
-	Find the shortest path between two people in the network.
-	Returns dict with: path_found, hops, path_nodes, path_relationships
+	Find the shortest path between two people with the most connections.
+	Strategy: Among all shortest paths, pick the one where intermediate nodes have the most total connections.
+	Returns dict with: path_found, hops, path_nodes, path_relationships, total_connections
 	"""
 	try:
 		driver = get_driver()
 		with driver.session(database=NEO4J_DB) as session:
-			# Find shortest path between two people
+			# Find ALL shortest paths, then pick the one with most intermediate connections
 			query = f"""
 			MATCH (a:Person), (b:Person)
 			WHERE a.name CONTAINS $person_a OR a.`ชื่อ` CONTAINS $person_a
 			  AND b.name CONTAINS $person_b OR b.`ชื่อ` CONTAINS $person_b
 			WITH a, b
-			MATCH path = shortestPath((a)-[*..{max_hops}]-(b))
-			RETURN path, length(path) as hops,
-			       [node in nodes(path) | {{name: coalesce(node.name, node.`ชื่อ`, 'Unknown'), labels: labels(node)}}] as path_nodes,
-			       [rel in relationships(path) | type(rel)] as path_rels
-			ORDER BY hops ASC
+			MATCH path = allShortestPaths((a)-[*..{max_hops}]-(b))
+			WITH path, length(path) as hops,
+			     nodes(path) as path_nodes,
+			     relationships(path) as path_rels
+			// Calculate total connections of intermediate nodes (excluding start and end)
+			WITH path, hops, path_nodes, path_rels,
+			     [node in path_nodes[1..-1] | size((node)-[]-())] as intermediate_connections
+			WITH path, hops, path_nodes, path_rels,
+			     reduce(total = 0, conn in intermediate_connections | total + conn) as total_connections
+			RETURN path, hops,
+			       [node in path_nodes | {{
+			           name: coalesce(node.name, node.`ชื่อ`, 'Unknown'), 
+			           labels: labels(node),
+			           connections: size((node)-[]-())
+			       }}] as path_nodes,
+			       [rel in path_rels | type(rel)] as path_rels,
+			       total_connections
+			ORDER BY hops ASC, total_connections DESC
 			LIMIT 1
 			"""
 			
@@ -220,14 +234,16 @@ def find_connection_path(person_a: str, person_b: str, max_hops: int = 3) -> dic
 					'path_found': True,
 					'hops': record['hops'],
 					'path_nodes': record['path_nodes'],
-					'path_relationships': record['path_rels']
+					'path_relationships': record['path_rels'],
+					'total_connections': record['total_connections']
 				}
 			else:
 				return {
 					'path_found': False,
 					'hops': None,
 					'path_nodes': [],
-					'path_relationships': []
+					'path_relationships': [],
+					'total_connections': 0
 				}
 	except Exception as e:
 		st.error(f"Error finding connection path: {e}")
@@ -1512,6 +1528,39 @@ Answer format:
 "พี่โด่งรู้จัก..." ← This is backwards!
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 
+⚠️ **CRITICAL RULE #1.1 - Optimal Connection Path Strategy!**
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+**When finding connection paths between two people:**
+
+🎯 **Strategy:** Find the SHORTEST path, but if multiple paths have same length, choose the one with MOST CONNECTED intermediate people.
+
+**Why?** 
+- Well-connected people = More influential = Better networking opportunity
+- Path through highly connected people = More reliable connections
+
+**Example:**
+Q: "หาเส้นทางจาก Boss ไป พี่โด่ง"
+
+Path A (3 hops): Boss → Person1 (5 connections) → Person2 (3 connections) → พี่โด่ง
+Total intermediate connections: 8
+
+Path B (3 hops): Boss → Person3 (10 connections) → Person4 (12 connections) → พี่โด่ง
+Total intermediate connections: 22
+
+✅ **CHOOSE Path B** because:
+- Same length (3 hops)
+- Person3 and Person4 are more well-connected (22 total vs 8 total)
+- Higher chance of successful introduction
+
+**When displaying path:**
+Show each person's connection count to highlight why this path is optimal:
+"เส้นทางที่แนะนำ (3 ขั้น, 22 connections รวม):
+1. Boss
+2. Person3 (มี 10 connections) ← Well connected!
+3. Person4 (มี 12 connections) ← Very well connected!
+4. พี่โด่ง"
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
 ⚠️ **CRITICAL RULE #2 - Always Include Full Ministry Name in Positions!**
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 ✅ CORRECT: "รัฐมนตรีว่าการกระทรวงมหาดไทย" (Minister of Interior)
@@ -1859,10 +1908,11 @@ Q: "อนุทิน ชาญวีรกูล ตำแหน่งอะ�
 ═══════════════════════════════════════════════════════════════
 1. ✅ USE ONLY information from Context above - DO NOT use general knowledge
 2. ✅ If asking "how to connect to X" → find WHO connects TO X (incoming connections)
-3. ✅ Always show "Connect by" networks (e.g., OSK115) - this is KEY for networking
-4. ✅ If ministry not in Context → say "ไม่มีข้อมูลกระทรวงในระบบ"
-5. ❌ DO NOT add explanations or responsibilities not in Context
-6. ❌ DO NOT guess or assume any information"""
+3. ✅ For connection paths: Choose shortest path with MOST CONNECTED intermediate people
+4. ✅ Always show "Connect by" networks (e.g., OSK115) - this is KEY for networking
+5. ✅ If ministry not in Context → say "ไม่มีข้อมูลกระทรวงในระบบ"
+6. ❌ DO NOT add explanations or responsibilities not in Context
+7. ❌ DO NOT guess or assume any information"""
 			
 			# Use streaming for better UX (optional - can be toggled)
 			use_streaming = st.session_state.get('use_streaming', False)
