@@ -538,6 +538,22 @@ def apply_custom_css():
 			border-right: 1px solid {border_color};
 		}}
 		
+		/* Hide the keyboard arrow text in sidebar toggle buttons */
+		button[kind="header"] span,
+		button[kind="header"] p,
+		[data-testid="collapsedControl"] span,
+		[data-testid="collapsedControl"] p {{
+			display: none !important;
+		}}
+		
+		/* Replace with hamburger icon */
+		button[kind="header"]::before,
+		[data-testid="collapsedControl"]::before {{
+			content: "☰" !important;
+			font-size: 1.5rem !important;
+			display: inline-block !important;
+		}}
+		
 		[data-testid="stSidebar"] .stButton button {{
 			width: 100%;
 			background-color: transparent;
