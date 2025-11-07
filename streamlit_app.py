@@ -507,9 +507,18 @@ def apply_custom_css():
 	
 	st.markdown(f"""
 	<style>
+		/* Import Anuphan font from Google Fonts */
+		@import url('https://fonts.googleapis.com/css2?family=Anuphan:wght@300;400;500;600;700&display=swap');
+		
+		/* Apply font globally */
+		* {{
+			font-family: 'Anuphan', sans-serif !important;
+		}}
+		
 		/* Main container and all backgrounds */
 		.stApp {{
 			background-color: {main_bg} !important;
+			font-family: 'Anuphan', sans-serif !important;
 		}}
 		
 		/* Header area */
@@ -547,9 +556,10 @@ def apply_custom_css():
 			background-color: {hover_bg};
 		}}
 		
-		/* Text color */
-		.stMarkdown, p, span, div {{
+		/* Text color and font */
+		.stMarkdown, p, span, div, label, input, textarea, button {{
 			color: {text_color};
+			font-family: 'Anuphan', sans-serif !important;
 		}}
 		
 		/* Left-right chat layout */
