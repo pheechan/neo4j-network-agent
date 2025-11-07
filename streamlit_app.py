@@ -459,111 +459,277 @@ def ask_openrouter_requests(prompt: str, model: str = OPENROUTER_MODEL, max_toke
 
 ## Streamlit chat UI with ChatGPT-like design
 st.set_page_config(
-	page_title="Neo4j Chat Agent", 
-	layout="centered",  # Changed from "wide" to "centered" for ChatGPT-like feel
-	page_icon="🤖",
-	initial_sidebar_state="collapsed"  # Start with sidebar hidden
+	page_title="STelligence Network Agent", 
+	layout="wide",  # Wide layout for proper left sidebar + center content
+	page_icon="🔮",
+	initial_sidebar_state="expanded"  # Show sidebar by default like ChatGPT
 )
 
-# Custom CSS for ChatGPT-like styling with dark sidebar
-st.markdown("""
+# Initialize theme state
+if "theme" not in st.session_state:
+	st.session_state.theme = "dark"  # Default to dark mode
+
+# Custom CSS for ChatGPT-like styling with theme support
+theme_colors = {
+	"dark": {
+		"bg": "#343541",
+		"secondary_bg": "#444654",
+		"sidebar_bg": "#202123",
+		"sidebar_hover": "#2a2b32",
+		"text": "#ececf1",
+		"border": "#565869",
+		"user_msg": "#343541",
+		"assistant_msg": "#444654",
+		"input_bg": "#40414f",
+	},
+	"light": {
+		"bg": "#ffffff",
+		"secondary_bg": "#f7f7f8",
+		"sidebar_bg": "#f7f7f8",
+		"sidebar_hover": "#ececf1",
+		"text": "#000000",
+		"border": "#d1d5db",
+		"user_msg": "#f7f7f8",
+		"assistant_msg": "#ffffff",
+		"input_bg": "#ffffff",
+	}
+}
+
+colors = theme_colors[st.session_state.theme]
+
+st.markdown(f"""
 <style>
 	/* Hide Streamlit branding */
-	#MainMenu {visibility: hidden;}
-	footer {visibility: hidden;}
+	#MainMenu {{visibility: hidden;}}
+	footer {{visibility: hidden;}}
+	header {{visibility: hidden;}}
+	
+	/* Main background */
+	.stApp {{
+		background-color: {colors['bg']};
+	}}
 	
 	/* Adjust spacing for cleaner look */
-	.block-container {
-		padding-top: 2rem;
-		padding-bottom: 2rem;
-	}
+	.block-container {{
+		padding-top: 1rem;
+		padding-bottom: 1rem;
+		max-width: 48rem;
+	}}
 	
-	/* Style chat messages */
-	.stChatMessage {
-		padding: 1rem;
+	/* ChatGPT-style sidebar */
+	[data-testid="stSidebar"] {{
+		background-color: {colors['sidebar_bg']};
+		padding-top: 1rem;
+	}}
+	
+	[data-testid="stSidebar"] * {{
+		color: {colors['text']} !important;
+	}}
+	
+	[data-testid="stSidebar"] button {{
+		background-color: transparent;
+		border: 1px solid {colors['border']};
+		color: {colors['text']} !important;
+		border-radius: 0.375rem;
+		padding: 0.75rem;
+		text-align: left;
+		transition: all 0.2s;
+	}}
+	
+	[data-testid="stSidebar"] button:hover {{
+		background-color: {colors['sidebar_hover']};
+	}}
+	
+	[data-testid="stSidebar"] hr {{
+		border-color: {colors['border']};
+		margin: 1rem 0;
+	}}
+	
+	/* Chat messages - side by side layout */
+	.stChatMessage {{
+		padding: 1.5rem;
 		border-radius: 0.5rem;
-	}
+		margin-bottom: 1rem;
+	}}
 	
-	/* Dark sidebar styling */
-	[data-testid="stSidebar"] {
-		background-color: #202123;
-	}
+	/* User message (right-aligned) */
+	[data-testid="stChatMessageContent"]:has(+ [data-testid="chatAvatarIcon-user"]) {{
+		background-color: {colors['user_msg']};
+		margin-left: auto;
+		margin-right: 0;
+	}}
 	
-	[data-testid="stSidebar"] * {
-		color: #ececf1 !important;
-	}
-	
-	[data-testid="stSidebar"] button {
-		background-color: #2d2d30;
-		border: 1px solid #4d4d4f;
-		color: #ececf1 !important;
-	}
-	
-	[data-testid="stSidebar"] button:hover {
-		background-color: #3d3d40;
-		border-color: #6d6d6f;
-	}
-	
-	[data-testid="stSidebar"] hr {
-		border-color: #4d4d4f;
-	}
+	/* Assistant message (left-aligned) */
+	.stChatMessage[data-testid*="assistant"] {{
+		background-color: {colors['assistant_msg']};
+	}}
 	
 	/* Chat input styling */
-	.stChatInput {
-		border-radius: 1.5rem;
-	}
+	.stChatInput {{
+		border-radius: 0.75rem;
+		border: 1px solid {colors['border']};
+		background-color: {colors['input_bg']};
+	}}
+	
+	.stChatInput textarea {{
+		background-color: {colors['input_bg']};
+		color: {colors['text']};
+	}}
+	
+	/* Style for thread buttons */
+	.thread-button {{
+		width: 100%;
+		text-align: left;
+		padding: 0.5rem;
+		margin-bottom: 0.25rem;
+	}}
+	
+	/* Title styling */
+	h1 {{
+		color: {colors['text']};
+		font-size: 1.5rem;
+		font-weight: 600;
+		margin-bottom: 0.5rem;
+	}}
+	
+	/* Caption and text */
+	.stCaption, p {{
+		color: {colors['text']};
+	}}
 </style>
 """, unsafe_allow_html=True)
 
 if "threads" not in st.session_state:
-	# threads: dict[thread_id] -> {"title": str, "messages": [ {role,content,time} ]}
-	st.session_state.threads = {1: {"title": "Default", "messages": []}}
+	# threads: dict[thread_id] -> {"title": str, "messages": [ {role,content,time} ], "created_at": str}
+	st.session_state.threads = {
+		1: {
+			"title": "New Chat",
+			"messages": [],
+			"created_at": datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+		}
+	}
 	st.session_state.current_thread = 1
 	st.session_state.thread_counter = 1
 
+# Initialize edit mode
+if "edit_mode" not in st.session_state:
+	st.session_state.edit_mode = False
+	st.session_state.edit_message_idx = None
+
 
 def new_thread(title: str = None):
+	"""Create a new conversation thread"""
 	st.session_state.thread_counter += 1
 	tid = st.session_state.thread_counter
-	st.session_state.threads[tid] = {"title": title or f"Thread {tid}", "messages": []}
+	st.session_state.threads[tid] = {
+		"title": title or "New Chat",
+		"messages": [],
+		"created_at": datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+	}
 	st.session_state.current_thread = tid
 
 
+def delete_thread(tid: int):
+	"""Delete a conversation thread"""
+	if tid in st.session_state.threads and len(st.session_state.threads) > 1:
+		del st.session_state.threads[tid]
+		# Switch to another thread
+		st.session_state.current_thread = list(st.session_state.threads.keys())[0]
+
+
+def update_thread_title(tid: int, first_message: str):
+	"""Update thread title based on first message"""
+	# Use first 30 characters of first message as title
+	if first_message:
+		title = first_message[:50] + ("..." if len(first_message) > 50 else "")
+		st.session_state.threads[tid]["title"] = title
+
+
+def toggle_theme():
+	"""Toggle between dark and light mode"""
+	st.session_state.theme = "light" if st.session_state.theme == "dark" else "dark"
+
+
 def clear_current_thread():
+	"""Clear messages in current thread"""
 	tid = st.session_state.current_thread
 	st.session_state.threads[tid]["messages"] = []
+	st.session_state.threads[tid]["title"] = "New Chat"
 
 
 with st.sidebar:
-	st.markdown("### 💬 Neo4j Chat Agent")
-	st.markdown("---")
+	# Header with logo and title
+	st.markdown("### � STelligence Network Agent")
+	st.caption("Powered by Neo4j Knowledge Graph")
 	
-	# Thread management
-	st.markdown("**Conversations**")
-	for tid, meta in list(st.session_state.threads.items()):
-		label = f"💬 {meta['title']}"
-		if st.button(label, key=f"thread-{tid}", use_container_width=True):
-			st.session_state.current_thread = tid
-
-	col_a, col_b = st.columns(2)
-	with col_a:
-		if st.button("➕ New", key="new_thread", use_container_width=True):
-			new_thread()
-			st.rerun()
-	with col_b:
-		if st.button("🗑️ Clear", key="clear_thread", use_container_width=True):
-			clear_current_thread()
-			st.rerun()
+	# New Chat button (prominent)
+	if st.button("➕ New Chat", key="new_chat", use_container_width=True, type="primary"):
+		new_thread()
+		st.rerun()
 	
 	st.markdown("---")
-	st.markdown("**Settings**")
+	
+	# Conversation History
+	st.markdown("**💬 Chat History**")
+	
+	# Sort threads by created_at (most recent first)
+	sorted_threads = sorted(
+		st.session_state.threads.items(),
+		key=lambda x: x[1].get("created_at", ""),
+		reverse=True
+	)
+	
+	for tid, meta in sorted_threads:
+		col1, col2 = st.columns([4, 1])
+		
+		with col1:
+			# Highlight active thread
+			button_type = "primary" if tid == st.session_state.current_thread else "secondary"
+			thread_icon = "💬" if meta["messages"] else "📝"
+			thread_label = f"{thread_icon} {meta['title']}"
+			
+			if st.button(
+				thread_label,
+				key=f"thread-{tid}",
+				use_container_width=True,
+				type=button_type if tid == st.session_state.current_thread else "secondary",
+				disabled=tid == st.session_state.current_thread
+			):
+				st.session_state.current_thread = tid
+				st.rerun()
+		
+		with col2:
+			# Delete button (only show if not current thread and more than 1 thread exists)
+			if len(st.session_state.threads) > 1:
+				if st.button("🗑️", key=f"del-{tid}", help="Delete conversation"):
+					delete_thread(tid)
+					st.rerun()
+	
+	st.markdown("---")
+	
+	# Theme Toggle
+	theme_icon = "☀️" if st.session_state.theme == "dark" else "🌙"
+	theme_label = f"{theme_icon} {'Light Mode' if st.session_state.theme == 'dark' else 'Dark Mode'}"
+	
+	if st.button(theme_label, key="theme_toggle", use_container_width=True):
+		toggle_theme()
+		st.rerun()
+	
+	# Clear Current Chat
+	if st.button("🧹 Clear Current Chat", key="clear_thread", use_container_width=True):
+		clear_current_thread()
+		st.rerun()
+	
+	st.markdown("---")
+	st.markdown("**⚙️ Settings**")
 	with st.expander("🔧 Configuration"):
 		st.caption(f"**Model:** {OPENROUTER_MODEL}")
-		st.caption(f"**Neo4j:** {NEO4J_DB}")
-		st.caption(f"**URI:** {NEO4J_URI[:30]}...")
+		st.caption(f"**Database:** {NEO4J_DB}")
+		st.caption(f"**Neo4j URI:** {NEO4J_URI[:35]}...")
+		st.caption(f"**Theme:** {st.session_state.theme.title()}")
 	
 	st.markdown("---")
-	st.markdown("**🔧 Admin Tools**")
+	st.markdown("**�️ Admin Tools**")
 	
 	if EMBEDDINGS_AVAILABLE:
 		if st.button("⚡ Generate Embeddings", key="gen_embeddings", use_container_width=True, help="Generate embeddings for nodes without them"):
@@ -698,48 +864,111 @@ OPTIONS {indexConfig: {
 				st.error(f"Error: {str(e)[:200]}")
 
 
-def render_messages(messages: List[Dict]):
-	"""Render messages in ChatGPT style"""
-	for m in messages:
+def render_messages_with_actions(messages: List[Dict], thread_id: int):
+	"""Render messages in ChatGPT style with edit/regenerate actions"""
+	for idx, m in enumerate(messages):
 		role = m.get("role")
 		content = m.get("content")
+		
 		if role == "user":
 			with st.chat_message("user", avatar="👤"):
 				st.markdown(content)
+				
+				# Action buttons for user messages (edit functionality)
+				col1, col2, col3 = st.columns([1, 1, 8])
+				with col1:
+					if st.button("✏️", key=f"edit-{thread_id}-{idx}", help="Edit message"):
+						st.session_state.edit_mode = True
+						st.session_state.edit_message_idx = idx
+						st.rerun()
+				with col2:
+					if st.button("🔄", key=f"regen-{thread_id}-{idx}", help="Regenerate from here"):
+						# Remove messages after this point and regenerate
+						st.session_state.threads[thread_id]["messages"] = messages[:idx+1]
+						# Remove the assistant response if it exists
+						if len(st.session_state.threads[thread_id]["messages"]) > idx + 1:
+							st.session_state.threads[thread_id]["messages"] = st.session_state.threads[thread_id]["messages"][:idx+1]
+						st.session_state.regenerate_from = content
+						st.rerun()
 		else:
-			with st.chat_message("assistant", avatar="🤖"):
+			with st.chat_message("assistant", avatar="🔮"):
 				st.markdown(content)
 
 
-# Main chat interface - ChatGPT style (no columns, full width centered)
-st.markdown("## 🤖 Neo4j Knowledge Agent")
-st.caption("Ask me anything about the knowledge graph")
+# Main chat interface - ChatGPT style
+st.markdown("# 🔮 STelligence Network Agent")
+st.caption("Ask anything about the knowledge network • Powered by Neo4j Graph Database")
 
 # Show info about embeddings on first visit
 if "shown_embeddings_info" not in st.session_state:
-	with st.info("ℹ️ **Using free HuggingFace embeddings** - First query may take ~30s to download the model (one-time). Subsequent queries will be fast!"):
-		pass
+	st.info("ℹ️ **Using free HuggingFace embeddings** - First query may take ~30s to download the model (one-time). Subsequent queries will be fast!")
 	st.session_state.shown_embeddings_info = True
 
-# Render conversation history
-render_messages(st.session_state.threads[st.session_state.current_thread]["messages"])
+# Get current thread
+tid = st.session_state.current_thread
+current_thread = st.session_state.threads[tid]
 
-# Chat input at the bottom (ChatGPT style)
-user_input = st.chat_input("ส่งข้อความของคุณ... (Type your message...)", key="chat_input")
+# Handle edit mode
+if st.session_state.edit_mode and st.session_state.edit_message_idx is not None:
+	st.info("✏️ **Edit Mode** - Modify your message below and press Enter to resend")
+	
+	# Get the message to edit
+	edit_idx = st.session_state.edit_message_idx
+	original_message = current_thread["messages"][edit_idx]["content"]
+	
+	# Show editable text area
+	edited_text = st.text_area(
+		"Edit your message:",
+		value=original_message,
+		height=100,
+		key="edit_textarea"
+	)
+	
+	col1, col2 = st.columns([1, 4])
+	with col1:
+		if st.button("✅ Send Edited", type="primary"):
+			if edited_text.strip():
+				# Remove messages from edit point onwards
+				current_thread["messages"] = current_thread["messages"][:edit_idx]
+				# Add edited message
+				st.session_state.edit_mode = False
+				st.session_state.edit_message_idx = None
+				st.session_state.regenerate_from = edited_text.strip()
+				st.rerun()
+	with col2:
+		if st.button("❌ Cancel"):
+			st.session_state.edit_mode = False
+			st.session_state.edit_message_idx = None
+			st.rerun()
+
+# Render conversation history
+render_messages_with_actions(current_thread["messages"], tid)
+
+# Check if we need to regenerate from an edited message
+if "regenerate_from" in st.session_state and st.session_state.regenerate_from:
+	user_input = st.session_state.regenerate_from
+	st.session_state.regenerate_from = None
+	# Process as new input below
+else:
+	# Chat input at the bottom (ChatGPT style)
+	user_input = st.chat_input("💬 Send a message... (ส่งข้อความ...)", key="chat_input")
 
 if user_input and user_input.strip():
-	# append user message
-	tid = st.session_state.current_thread
+	# Append user message
 	msg = {"role": "user", "content": user_input.strip(), "time": datetime.now().strftime("%Y-%m-%d %H:%M:%S")}
-	st.session_state.threads[tid]["messages"].append(msg)
+	current_thread["messages"].append(msg)
+	
+	# Update thread title if this is the first message
+	if len(current_thread["messages"]) == 1:
+		update_thread_title(tid, user_input.strip())
 	
 	# Display user message immediately
 	with st.chat_message("user", avatar="👤"):
 		st.markdown(user_input.strip())
 
-	# query neo4j for context and call model
-	with st.chat_message("assistant", avatar="🤖"):
-		with st.spinner("กำลังค้นหาข้อมูล... (Searching knowledge graph...)"):
+	# Query neo4j for context and call model
+	with st.chat_message("assistant", avatar="🔮"):
+		with st.spinner("🔍 Searching knowledge graph... (กำลังค้นหาข้อมูล...)"):
 			# Initialize variables at the start
 			ctx = ""
 			nodes = []
@@ -747,7 +976,7 @@ if user_input and user_input.strip():
 			# Use relationship-aware vector search (gets nodes + their connections via WORKS_AS, etc.)
 			if VECTOR_SEARCH_AVAILABLE and query_with_relationships is not None:
 				try:
-					st.caption(f"🔍 Searching with relationships (Person → Position, Ministry, Stelligence networks, etc.)...")
+					st.caption(f"🔍 Searching across all indexes (Person, Position, Ministry, Agency, Remark, Connect by)...")
 					results = query_with_relationships(
 						user_input,
 						top_k_per_index=30,  # Increased to 30 for comprehensive Stelligence network coverage
@@ -1154,7 +1383,7 @@ Q: "อนุทิน ชาญวีรกูล ตำแหน่งอะ�
 			answer = ask_openrouter_requests(user_message, max_tokens=2048, system_prompt=system_prompt)
 			st.markdown(answer)
 	
+	# Save assistant response
 	resp = {"role": "assistant", "content": answer, "time": datetime.now().strftime("%Y-%m-%d %H:%M:%S")}
-	st.session_state.threads[tid]["messages"].append(resp)
+	current_thread["messages"].append(resp)
 	st.rerun()
-
