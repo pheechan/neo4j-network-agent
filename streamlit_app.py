@@ -457,131 +457,126 @@ def ask_openrouter_requests(prompt: str, model: str = OPENROUTER_MODEL, max_toke
 		return f"OpenRouter request failed: {type(e).__name__} {e}"
 
 
-## Streamlit chat UI with modern dark design
+## Streamlit chat UI with modern ChatGPT-like design
 st.set_page_config(
 	page_title="STelligence Network Agent", 
-	layout="wide",  # Wide layout for proper left sidebar + center content
-	page_icon="⚡",
-	initial_sidebar_state="expanded"  # Show sidebar by default
+	layout="wide",
+	page_icon="💬",
+	initial_sidebar_state="expanded"
 )
 
-# Custom CSS for modern dark styling (no light mode)
-st.markdown("""
-<style>
-	/* Hide Streamlit branding */
-	#MainMenu {visibility: hidden;}
-	footer {visibility: hidden;}
-	header {visibility: hidden;}
+# Custom CSS for ChatGPT-like styling
+def apply_custom_css():
+	bg_color = "#0f1419"
+	secondary_bg = "#1a1f2e"
+	text_color = "#ffffff"
+	border_color = "#2d3748"
+	input_bg = "#2d3748"
+	message_bg = "#2d3748"
+	hover_bg = "#374151"
 	
-	/* Main background - darker */
-	.stApp {
-		background-color: #0e1117;
-	}
-	
-	/* Adjust spacing for cleaner look */
-	.block-container {
-		padding-top: 3rem;
-		padding-bottom: 2rem;
-		max-width: 48rem;
-	}
-	
-	/* Modern dark sidebar */
-	[data-testid="stSidebar"] {
-		background-color: #1a1b1e;
-		padding-top: 1rem;
-		border-right: 1px solid #2d2e33;
-	}
-	
-	[data-testid="stSidebar"] * {
-		color: #e4e4e7 !important;
-	}
-	
-	[data-testid="stSidebar"] button {
-		background-color: transparent;
-		border: 1px solid #3a3b40;
-		color: #e4e4e7 !important;
-		border-radius: 0.5rem;
-		padding: 0.75rem;
-		text-align: left;
-		transition: all 0.2s;
-		font-size: 0.9rem;
-	}
-	
-	[data-testid="stSidebar"] button:hover {
-		background-color: #2a2b30;
-		border-color: #4a4b50;
-	}
-	
-	[data-testid="stSidebar"] hr {
-		border-color: #3a3b40;
-		margin: 1rem 0;
-	}
-	
-	/* Chat messages - darker */
-	.stChatMessage {
-		padding: 1.5rem;
-		border-radius: 0.5rem;
-		margin-bottom: 1rem;
-		background-color: #1a1b1e;
-	}
-	
-	/* User message */
-	.stChatMessage[data-testid*="user"] {
-		background-color: #1f2024;
-	}
-	
-	/* Assistant message */
-	.stChatMessage[data-testid*="assistant"] {
-		background-color: #1a1b1e;
-	}
-	
-	/* Chat input styling - darker */
-	.stChatInput {
-		border-radius: 0.75rem;
-		border: 1px solid #3a3b40;
-		background-color: #1a1b1e;
-	}
-	
-	.stChatInput textarea {
-		background-color: #1a1b1e;
-		color: #e4e4e7;
-		border: none;
-	}
-	
-	/* Title styling */
-	h1 {
-		color: #e4e4e7;
-		font-size: 2rem;
-		font-weight: 600;
-		text-align: center;
-		margin-bottom: 0.5rem;
-	}
-	
-	/* Caption and text */
-	.stCaption, p {
-		color: #a1a1aa;
-	}
-	
-	/* Center welcome message */
-	.welcome-container {
-		text-align: center;
-		padding: 2rem;
-		margin-top: 8rem;
-	}
-	
-	.welcome-title {
-		font-size: 2rem;
-		font-weight: 600;
-		color: #e4e4e7;
-		margin-bottom: 1rem;
-	}
-	
-	.welcome-subtitle {
-		font-size: 1rem;
-		color: #a1a1aa;
-	}
-</style>
-""", unsafe_allow_html=True)
+	st.markdown(f"""
+	<style>
+		/* Main container */
+		.stApp {{
+			background-color: {bg_color};
+		}}
+		
+		/* Sidebar styling */
+		[data-testid="stSidebar"] {{
+			background-color: {secondary_bg};
+			border-right: 1px solid {border_color};
+		}}
+		
+		[data-testid="stSidebar"] .stButton button {{
+			width: 100%;
+			background-color: {input_bg};
+			color: {text_color};
+			border: 1px solid {border_color};
+			border-radius: 0.5rem;
+			padding: 0.5rem 1rem;
+			margin-bottom: 0.5rem;
+		}}
+		
+		[data-testid="stSidebar"] .stButton button:hover {{
+			background-color: {hover_bg};
+		}}
+		
+		/* Text color */
+		.stMarkdown, p, span, div {{
+			color: {text_color};
+		}}
+		
+		/* Chat messages */
+		[data-testid="stChatMessageContent"] {{
+			background-color: {message_bg};
+			border-radius: 1rem;
+			padding: 1rem;
+		}}
+		
+		/* Input area */
+		.stChatInput {{
+			border: 1px solid {border_color};
+			border-radius: 1rem;
+			background-color: {input_bg};
+		}}
+		
+		/* Headers */
+		h1, h2, h3 {{
+			color: {text_color};
+		}}
+		
+		/* Welcome card styling */
+		.welcome-card {{
+			background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+			padding: 3rem;
+			border-radius: 1rem;
+			text-align: center;
+			margin: 2rem auto;
+			max-width: 800px;
+			color: white;
+		}}
+		
+		.feature-card {{
+			background-color: {message_bg};
+			padding: 1.5rem;
+			border-radius: 0.75rem;
+			border: 1px solid {border_color};
+			margin: 0.5rem;
+			text-align: center;
+			transition: all 0.3s;
+		}}
+		
+		.feature-card:hover {{
+			background-color: {hover_bg};
+			transform: translateY(-2px);
+		}}
+		
+		/* Button styling */
+		.stButton button {{
+			border-radius: 0.5rem;
+			border: 1px solid {border_color};
+			background-color: {input_bg};
+			color: {text_color};
+		}}
+		
+		.stButton button:hover {{
+			background-color: {hover_bg};
+		}}
+		
+		/* Hide Streamlit branding */
+		#MainMenu {{visibility: hidden;}}
+		footer {{visibility: hidden;}}
+		header {{visibility: hidden;}}
+		
+		/* Divider */
+		hr {{
+			border-color: {border_color};
+		}}
+	</style>
+	""", unsafe_allow_html=True)
+
+apply_custom_css()
 
 if "threads" not in st.session_state:
 	# threads: dict[thread_id] -> {"title": str, "messages": [ {role,content,time} ], "created_at": str}
@@ -644,7 +639,7 @@ with st.sidebar:
 	st.markdown("---")
 	
 	# Conversation History
-	st.markdown("**💬 Chat History**")
+	st.markdown("**Chat History**")
 	
 	# Sort threads by created_at (most recent first)
 	sorted_threads = sorted(
@@ -687,12 +682,11 @@ with st.sidebar:
 		st.rerun()
 	
 	st.markdown("---")
-	st.markdown("**⚙️ Settings**")
-	with st.expander("🔧 Configuration"):
+	st.markdown("**Settings**")
+	with st.expander("Configuration"):
 		st.caption(f"**Model:** {OPENROUTER_MODEL}")
 		st.caption(f"**Database:** {NEO4J_DB}")
 		st.caption(f"**Neo4j URI:** {NEO4J_URI[:35]}...")
-		st.caption(f"**Theme:** {st.session_state.theme.title()}")
 	
 	st.markdown("---")
 	st.markdown("**�️ Admin Tools**")
