@@ -494,9 +494,9 @@ st.markdown("""
 
 # Custom CSS for ChatGPT-like styling
 def apply_custom_css():
-	# Swap colors: darker sidebar like ChatGPT, lighter main area
-	sidebar_bg = "#0d1117"  # Very dark like ChatGPT sidebar
-	main_bg = "#111827"     # Updated background color
+	# Updated colors
+	sidebar_bg = "#181818"  # Darker sidebar
+	main_bg = "#212121"     # Chat interface background
 	text_color = "#ececec"
 	border_color = "#3d4451"
 	input_bg = "#2f2f2f"
@@ -507,12 +507,27 @@ def apply_custom_css():
 	
 	st.markdown(f"""
 	<style>
-		/* Main container */
+		/* Main container and all backgrounds */
 		.stApp {{
-			background-color: {main_bg};
+			background-color: {main_bg} !important;
 		}}
 		
-		/* Sidebar styling - darker like ChatGPT */
+		/* Header area */
+		header {{
+			background-color: {main_bg} !important;
+		}}
+		
+		/* Main content area */
+		.main {{
+			background-color: {main_bg} !important;
+		}}
+		
+		/* Block container */
+		.block-container {{
+			background-color: {main_bg} !important;
+		}}
+		
+		/* Sidebar styling */
 		[data-testid="stSidebar"] {{
 			background-color: {sidebar_bg} !important;
 			border-right: 1px solid {border_color};
