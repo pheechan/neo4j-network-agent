@@ -618,7 +618,18 @@ def apply_custom_css():
 		.stChatInput {{
 			border: 1px solid {border_color};
 			border-radius: 1rem;
-			background-color: {input_bg};
+			background-color: #303030 !important;
+		}}
+		
+		/* Input text color */
+		.stChatInput input {{
+			background-color: #303030 !important;
+			color: {text_color};
+		}}
+		
+		/* Bottom area (stBottom) */
+		[data-testid="stBottom"] {{
+			background-color: {main_bg} !important;
 		}}
 		
 		/* Headers */
