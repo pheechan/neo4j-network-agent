@@ -507,23 +507,14 @@ def apply_custom_css():
 	
 	st.markdown(f"""
 	<style>
-		/* Import Anuphan font from Google Fonts */
-		@import url('https://fonts.googleapis.com/css2?family=Anuphan:wght@300;400;500;600;700&display=swap');
-		
-		/* Apply font globally but exclude Material Icons elements */
+		/* Apply default system font */
 		* {{
-			font-family: 'Anuphan', -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif !important;
-		}}
-		
-		/* Keep Material Icons for icon elements */
-		.material-icons, [class*="material-"], button[kind="header"], [data-testid="collapsedControl"] {{
-			font-family: 'Material Icons', 'Material Symbols Outlined', sans-serif !important;
+			font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif !important;
 		}}
 		
 		/* Main container and all backgrounds */
 		.stApp {{
 			background-color: {main_bg} !important;
-			font-family: 'Anuphan', sans-serif !important;
 		}}
 		
 		/* Header area */
@@ -545,31 +536,6 @@ def apply_custom_css():
 		[data-testid="stSidebar"] {{
 			background-color: {sidebar_bg} !important;
 			border-right: 1px solid {border_color};
-		}}
-		
-		/* Hide the weird keyboard arrow text */
-		button[kind="header"]::before {{
-			content: "☰" !important;
-			font-family: Arial, sans-serif !important;
-		}}
-		
-		button[kind="header"] {{
-			font-size: 0 !important;
-		}}
-		
-		button[kind="header"]::before {{
-			font-size: 1.5rem !important;
-		}}
-		
-		/* Hide collapsed control text */
-		[data-testid="collapsedControl"] {{
-			font-size: 0 !important;
-		}}
-		
-		[data-testid="collapsedControl"]::before {{
-			content: "☰" !important;
-			font-size: 1.5rem !important;
-			font-family: Arial, sans-serif !important;
 		}}
 		
 		[data-testid="stSidebar"] .stButton button {{
