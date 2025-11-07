@@ -509,16 +509,19 @@ def apply_custom_css():
 	<style>
 		/* Import Anuphan font from Google Fonts */
 		@import url('https://fonts.googleapis.com/css2?family=Anuphan:wght@300;400;500;600;700&display=swap');
+		/* Import Material Icons for symbols */
+		@import url('https://fonts.googleapis.com/css2?family=Material+Icons');
+		@import url('https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:opsz,wght,FILL,GRAD@20..48,100..700,0..1,-50..200');
 		
-		/* Apply font globally */
+		/* Apply font globally with fallback */
 		* {{
-			font-family: 'Anuphan', sans-serif !important;
+			font-family: 'Anuphan', 'Material Symbols Outlined', 'Material Icons', -apple-system, BlinkMacSystemFont, sans-serif !important;
 		}}
 		
 		/* Main container and all backgrounds */
 		.stApp {{
 			background-color: {main_bg} !important;
-			font-family: 'Anuphan', sans-serif !important;
+			font-family: 'Anuphan', 'Material Symbols Outlined', 'Material Icons', sans-serif !important;
 		}}
 		
 		/* Header area */
@@ -542,15 +545,6 @@ def apply_custom_css():
 			border-right: 1px solid {border_color};
 		}}
 		
-		/* Hide sidebar collapse button icons */
-		[data-testid="collapsedControl"] {{
-			display: none;
-		}}
-		
-		button[kind="header"] {{
-			display: none;
-		}}
-		
 		[data-testid="stSidebar"] .stButton button {{
 			width: 100%;
 			background-color: transparent;
@@ -565,10 +559,10 @@ def apply_custom_css():
 			background-color: {hover_bg};
 		}}
 		
-		/* Text color and font */
+		/* Text color and font with fallback */
 		.stMarkdown, p, span, div, label, input, textarea, button {{
 			color: {text_color};
-			font-family: 'Anuphan', sans-serif !important;
+			font-family: 'Anuphan', 'Material Symbols Outlined', 'Material Icons', sans-serif !important;
 		}}
 		
 		/* Left-right chat layout */
