@@ -552,14 +552,8 @@ def apply_custom_css():
 			background-color: {hover_bg};
 		}}
 		
-		/* Text color and font */
-		.stMarkdown, p, span, div, label, input, textarea {{
-			color: {text_color};
-			font-family: 'Anuphan', sans-serif !important;
-		}}
-		
-		/* Keep default font for buttons with icons */
-		button {{
+		/* Text color */
+		.stMarkdown, p, span, div, label, input, textarea, button {{
 			color: {text_color};
 		}}
 		
