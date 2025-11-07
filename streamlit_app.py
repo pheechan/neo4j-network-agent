@@ -1,3 +1,9 @@
+"""
+STelligence Network Agent - Neo4j Knowledge Graph Q&A System
+Version: 1.1.0 - Bullet formatting fix applied
+Last Updated: 2025-11-07
+"""
+
 import os
 from dotenv import load_dotenv
 from typing import List
