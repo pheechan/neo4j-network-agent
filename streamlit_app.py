@@ -460,7 +460,7 @@ def ask_openrouter_requests(prompt: str, model: str = OPENROUTER_MODEL, max_toke
 ## Streamlit chat UI with modern ChatGPT-like design
 st.set_page_config(
 	page_title="STelligence Network Agent", 
-	layout="wide",
+	layout="centered",
 	page_icon="💬",
 	initial_sidebar_state="expanded"
 )
@@ -657,19 +657,18 @@ def clear_current_thread():
 
 
 with st.sidebar:
-	# Header with logo and title
-	st.markdown("### STelligence Network Agent")
-	st.caption("Powered by Neo4j Knowledge Graph")
+	st.title("STelligence")
+	st.write("Network Agent")
 	
 	# New Chat button (prominent)
-	if st.button("+ New Chat", key="new_chat", use_container_width=True, type="primary"):
+	if st.button("+ New Chat", key="new_chat", use_container_width=True):
 		new_thread()
 		st.rerun()
 	
-	st.markdown("---")
+	st.divider()
 	
 	# Conversation History
-	st.markdown("**Chat History**")
+	st.subheader("Chat History")
 	
 	# Sort threads by created_at (most recent first)
 	sorted_threads = sorted(
@@ -683,14 +682,12 @@ with st.sidebar:
 		
 		with col1:
 			# Highlight active thread
-			button_type = "primary" if tid == st.session_state.current_thread else "secondary"
 			thread_label = meta['title']
 			
 			if st.button(
 				thread_label,
 				key=f"thread-{tid}",
 				use_container_width=True,
-				type=button_type if tid == st.session_state.current_thread else "secondary",
 				disabled=tid == st.session_state.current_thread
 			):
 				st.session_state.current_thread = tid
@@ -703,12 +700,12 @@ with st.sidebar:
 					delete_thread(tid)
 					st.rerun()
 	
-	st.markdown("---")
+	st.divider()
 	
 	# Settings at bottom
 	with st.expander("Settings"):
-		st.caption(f"**Model:** {OPENROUTER_MODEL}")
-		st.caption(f"**Database:** {NEO4J_DB}")
+		st.caption(f"Model: {OPENROUTER_MODEL}")
+		st.caption(f"Database: {NEO4J_DB}")
 
 
 def render_messages_with_actions(messages: List[Dict], thread_id: int):
