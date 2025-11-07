@@ -3,6 +3,10 @@
 .env.*
 *.env
 
+# Analytics and logs
+query_analytics.jsonl
+*.log
+
 # Python
 __pycache__/
 *.py[cod]

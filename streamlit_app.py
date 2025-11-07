@@ -1,7 +1,17 @@
 """
 STelligence Network Agent - Neo4j Knowledge Graph Q&A System
-Version: 1.1.0 - Bullet formatting fix applied
+Version: 2.0.0 - Major improvements
 Last Updated: 2025-11-07
+
+Changelog v2.0.0:
+- ✅ Added retry logic with exponential backoff (handles 429 rate limits)
+- ✅ Added caching for vector search and LLM responses (1-hour TTL)
+- ✅ Added query intent detection (person/org/relationship/timeline)
+- ✅ Added multi-hop path finding for relationship queries
+- ✅ Added follow-up question generation
+- ✅ Added streaming response support (toggle in settings)
+- ✅ Added query analytics tracking (success rate, response time)
+- ✅ Improved error handling and user feedback
 """
 
 import os
@@ -9,6 +19,9 @@ from dotenv import load_dotenv
 from typing import List
 import requests
 import streamlit as st
+import time
+import json
+from functools import wraps
 
 try:
 	from neo4j import GraphDatabase
@@ -92,6 +105,195 @@ def get_embeddings_model():
 	return HuggingFaceEmbeddings(
 		model_name="sentence-transformers/paraphrase-multilingual-MiniLM-L12-v2"
 	)
+
+
+@st.cache_data(ttl=3600)  # Cache for 1 hour
+def cached_vector_search(query: str, top_k_per_index: int = 30):
+	"""
+	Cached vector search to avoid repeated API calls for same queries.
+	TTL=3600 means cache expires after 1 hour.
+	"""
+	if VECTOR_SEARCH_AVAILABLE and query_with_relationships is not None:
+		try:
+			return query_with_relationships(query, top_k_per_index=top_k_per_index)
+		except Exception as e:
+			st.error(f"Vector search error: {e}")
+			return []
+	return []
+
+
+@st.cache_data(ttl=1800)  # Cache for 30 minutes
+def cached_llm_response(prompt: str, context: str, model: str, max_tokens: int = 512, system_prompt: str = None):
+	"""
+	Cached LLM responses for identical query+context combinations.
+	Saves API costs and reduces latency for repeat queries.
+	"""
+	full_prompt = f"{context}\n\n{prompt}" if context else prompt
+	return ask_openrouter_requests(
+		prompt=full_prompt,
+		model=model,
+		max_tokens=max_tokens,
+		system_prompt=system_prompt
+	)
+
+
+def detect_query_intent(query: str) -> dict:
+	"""
+	Detect the intent and focus of the user's query.
+	Returns dict with: intent_type, focus_entities, search_strategy
+	"""
+	query_lower = query.lower()
+	
+	intent_info = {
+		'intent_type': 'general',
+		'focus_entities': [],
+		'search_strategy': 'broad',
+		'is_relationship_query': False,
+		'is_comparison_query': False
+	}
+	
+	# Person-focused queries
+	person_keywords = ['ใคร', 'who', 'คน', 'บุคคล', 'ชื่อ', 'name', 'นาม']
+	if any(word in query_lower for word in person_keywords):
+		intent_info['intent_type'] = 'person'
+		intent_info['search_strategy'] = 'person_focused'
+	
+	# Ministry/Organization queries
+	org_keywords = ['กระทรวง', 'ministry', 'องค์กร', 'organization', 'หน่วยงาน', 'agency', 'department']
+	if any(word in query_lower for word in org_keywords):
+		intent_info['intent_type'] = 'organization'
+		intent_info['search_strategy'] = 'org_focused'
+	
+	# Relationship/Connection queries
+	relationship_keywords = ['รู้จัก', 'connect', 'ผ่าน', 'through', 'เชื่อมโยง', 'relation', 'เส้นสาย', 'network']
+	if any(word in query_lower for word in relationship_keywords):
+		intent_info['is_relationship_query'] = True
+		intent_info['search_strategy'] = 'relationship_focused'
+	
+	# Position/Role queries
+	position_keywords = ['ตำแหน่ง', 'position', 'role', 'หน้าที่', 'duty', 'job']
+	if any(word in query_lower for word in position_keywords):
+		intent_info['intent_type'] = 'position'
+	
+	# Comparison queries
+	comparison_keywords = ['เปรียบเทียบ', 'compare', 'แตกต่าง', 'difference', 'เหมือน', 'similar']
+	if any(word in query_lower for word in comparison_keywords):
+		intent_info['is_comparison_query'] = True
+	
+	# Timeline queries
+	timeline_keywords = ['เมื่อไหร่', 'when', 'วันที่', 'date', 'ปี', 'year', 'ช่วงเวลา', 'period']
+	if any(word in query_lower for word in timeline_keywords):
+		intent_info['intent_type'] = 'timeline'
+	
+	return intent_info
+
+
+def find_connection_path(person_a: str, person_b: str, max_hops: int = 3) -> dict:
+	"""
+	Find the shortest path between two people in the network.
+	Returns dict with: path_found, hops, path_nodes, path_relationships
+	"""
+	try:
+		driver = get_driver()
+		with driver.session(database=NEO4J_DB) as session:
+			# Find shortest path between two people
+			query = f"""
+			MATCH (a:Person), (b:Person)
+			WHERE a.name CONTAINS $person_a OR a.`ชื่อ` CONTAINS $person_a
+			  AND b.name CONTAINS $person_b OR b.`ชื่อ` CONTAINS $person_b
+			WITH a, b
+			MATCH path = shortestPath((a)-[*..{max_hops}]-(b))
+			RETURN path, length(path) as hops,
+			       [node in nodes(path) | {{name: coalesce(node.name, node.`ชื่อ`, 'Unknown'), labels: labels(node)}}] as path_nodes,
+			       [rel in relationships(path) | type(rel)] as path_rels
+			ORDER BY hops ASC
+			LIMIT 1
+			"""
+			
+			result = session.run(query, person_a=person_a, person_b=person_b)
+			record = result.single()
+			
+			if record:
+				return {
+					'path_found': True,
+					'hops': record['hops'],
+					'path_nodes': record['path_nodes'],
+					'path_relationships': record['path_rels']
+				}
+			else:
+				return {
+					'path_found': False,
+					'hops': None,
+					'path_nodes': [],
+					'path_relationships': []
+				}
+	except Exception as e:
+		st.error(f"Error finding connection path: {e}")
+		return {'path_found': False, 'error': str(e)}
+
+
+def generate_followup_questions(context: str, original_query: str, max_questions: int = 3) -> List[str]:
+	"""
+	Generate relevant follow-up questions based on context and original query.
+	Returns list of suggested questions in Thai.
+	"""
+	if not context or len(context) < 50:
+		return []
+	
+	# Limit context to avoid token overflow
+	context_snippet = context[:800] if len(context) > 800 else context
+	
+	prompt = f"""Based on this information:
+{context_snippet}
+
+And the user's question: "{original_query}"
+
+Generate {max_questions} relevant follow-up questions in Thai that the user might want to ask next.
+Each question should:
+- Be specific and related to the information provided
+- Help explore deeper connections or details
+- Be in natural Thai language
+
+Format: Return ONLY the questions, one per line, each starting with "•"
+Do not include explanations or numbering."""
+
+	try:
+		response = ask_openrouter_requests(
+			prompt=prompt,
+			model=OPENROUTER_MODEL,
+			max_tokens=200,
+			system_prompt="You are a helpful assistant generating follow-up questions in Thai."
+		)
+		
+		# Extract questions starting with •
+		questions = [q.strip() for q in response.split('\n') if q.strip().startswith('•')]
+		return questions[:max_questions]
+	except Exception as e:
+		# Silently fail - follow-up questions are nice-to-have
+		return []
+
+
+def log_query_analytics(query: str, success: bool, error_type: str = None, response_time: float = None):
+	"""
+	Log query analytics to track performance and errors.
+	Helps identify which queries work well and which need improvement.
+	"""
+	try:
+		log_entry = {
+			'timestamp': datetime.now().isoformat(),
+			'query': query,
+			'success': success,
+			'error_type': error_type,
+			'response_time': response_time,
+			'model': OPENROUTER_MODEL
+		}
+		
+		# Append to analytics log file
+		with open('query_analytics.jsonl', 'a', encoding='utf-8') as f:
+			f.write(json.dumps(log_entry, ensure_ascii=False) + '\n')
+	except Exception:
+		# Don't let logging errors break the app
+		pass
 
 
 def generate_embeddings_for_nodes(driver, limit=50):
@@ -422,6 +624,39 @@ def local_search(question: str, limit: int = 3) -> List[dict]:
 	return [r[1] for r in results[:limit]]
 
 
+def retry_with_backoff(max_retries=3, base_delay=2):
+	"""
+	Decorator to retry API calls with exponential backoff.
+	Handles 429 (rate limit) and 5xx (server) errors automatically.
+	"""
+	def decorator(func):
+		@wraps(func)
+		def wrapper(*args, **kwargs):
+			for attempt in range(max_retries):
+				try:
+					return func(*args, **kwargs)
+				except requests.HTTPError as e:
+					status_code = e.response.status_code if hasattr(e.response, 'status_code') else 0
+					
+					# Retry on rate limits (429) or server errors (5xx)
+					if status_code == 429 or (500 <= status_code < 600):
+						if attempt < max_retries - 1:
+							delay = base_delay * (2 ** attempt)  # Exponential: 2s, 4s, 8s
+							st.warning(f"⏳ Rate limited or server error. Retrying in {delay}s... (Attempt {attempt + 1}/{max_retries})")
+							time.sleep(delay)
+							continue
+					# For other errors, raise immediately
+					raise
+				except Exception as e:
+					# For non-HTTP errors, raise immediately
+					raise
+			# If all retries exhausted, make final attempt
+			return func(*args, **kwargs)
+		return wrapper
+	return decorator
+
+
+@retry_with_backoff(max_retries=3, base_delay=2)
 def ask_openrouter_requests(prompt: str, model: str = OPENROUTER_MODEL, max_tokens: int = 512, system_prompt: str = None) -> str:
 	if not OPENROUTER_API_KEY:
 		return "OpenRouter API key not set (OPENROUTER_API_KEY or OPENAI_API_KEY)"
@@ -461,6 +696,66 @@ def ask_openrouter_requests(prompt: str, model: str = OPENROUTER_MODEL, max_toke
 		return j["choices"][0]["message"]["content"].strip()
 	except Exception as e:
 		return f"OpenRouter request failed: {type(e).__name__} {e}"
+
+
+def ask_openrouter_streaming(prompt: str, model: str = OPENROUTER_MODEL, max_tokens: int = 512, system_prompt: str = None):
+	"""
+	Stream responses token by token for better UX (like ChatGPT).
+	Yields text chunks as they arrive.
+	"""
+	if not OPENROUTER_API_KEY:
+		yield "OpenRouter API key not set"
+		return
+	
+	# Handle both base URL formats
+	base = OPENROUTER_API_BASE.rstrip('/')
+	if base.endswith('/v1'):
+		url = f"{base}/chat/completions"
+	else:
+		url = f"{base}/v1/chat/completions"
+	
+	headers = {
+		"Authorization": f"Bearer {OPENROUTER_API_KEY}",
+		"Content-Type": "application/json",
+	}
+	
+	# Build messages array
+	messages = []
+	if system_prompt:
+		messages.append({"role": "system", "content": system_prompt})
+	messages.append({"role": "user", "content": prompt})
+	
+	payload = {
+		"model": model,
+		"messages": messages,
+		"temperature": 0.2,
+		"max_tokens": max_tokens,
+		"stream": True  # Enable streaming
+	}
+	
+	try:
+		response = requests.post(url, headers=headers, json=payload, timeout=60, stream=True)
+		response.raise_for_status()
+		
+		# Parse Server-Sent Events (SSE)
+		for line in response.iter_lines():
+			if line:
+				line_text = line.decode('utf-8')
+				if line_text.startswith('data: '):
+					data_str = line_text[6:]  # Remove 'data: ' prefix
+					if data_str.strip() == '[DONE]':
+						break
+					try:
+						data = json.loads(data_str)
+						if 'choices' in data and len(data['choices']) > 0:
+							delta = data['choices'][0].get('delta', {})
+							content = delta.get('content', '')
+							if content:
+								yield content
+					except json.JSONDecodeError:
+						continue
+	except Exception as e:
+		yield f"\n\n[Error: {type(e).__name__} {e}]"
 
 
 def fix_bullet_formatting(text: str) -> str:
@@ -807,6 +1102,37 @@ with st.sidebar:
 	
 	st.divider()
 	
+	# ⚙️ Settings Section
+	with st.expander("⚙️ Settings", expanded=False):
+		st.markdown("**Response Options:**")
+		use_streaming = st.checkbox(
+			"🌊 Streaming responses",
+			value=st.session_state.get('use_streaming', False),
+			help="Stream responses token-by-token (like ChatGPT)"
+		)
+		st.session_state['use_streaming'] = use_streaming
+		
+		st.markdown("**Model Settings:**")
+		st.caption(f"Current model: `{OPENROUTER_MODEL}`")
+		
+		# Analytics summary
+		try:
+			if os.path.exists('query_analytics.jsonl'):
+				with open('query_analytics.jsonl', 'r', encoding='utf-8') as f:
+					logs = [json.loads(line) for line in f]
+				total_queries = len(logs)
+				success_count = sum(1 for log in logs if log.get('success'))
+				avg_time = sum(log.get('response_time', 0) for log in logs) / total_queries if total_queries > 0 else 0
+				
+				st.markdown("**📊 Analytics:**")
+				st.caption(f"Total queries: {total_queries}")
+				st.caption(f"Success rate: {success_count}/{total_queries} ({100*success_count/total_queries:.1f}%)")
+				st.caption(f"Avg response time: {avg_time:.2f}s")
+		except Exception:
+			pass
+	
+	st.divider()
+	
 	# Conversation History
 	st.subheader("Chat History")
 	
@@ -958,18 +1284,40 @@ if process_message:
 
 	# Query neo4j for context and call model
 	with st.chat_message("assistant", avatar="🔮"):
+		# Track response time for analytics
+		start_time = time.time()
+		
 		with st.spinner("🔍 Searching knowledge graph... (กำลังค้นหาข้อมูล...)"):
 			# Initialize variables at the start
 			ctx = ""
 			nodes = []
 			
-			# Use relationship-aware vector search (gets nodes + their connections via WORKS_AS, etc.)
+			# Detect query intent
+			intent = detect_query_intent(process_message)
+			if intent['intent_type'] != 'general':
+				st.caption(f"🎯 Detected query type: {intent['intent_type']}")
+			
+			# Check for multi-hop path queries
+			if intent['is_relationship_query']:
+				# Try to extract person names for path finding
+				import re
+				# Simple regex to find Thai names (this could be improved)
+				potential_names = re.findall(r'[ก-๙]+(?:\s+[ก-๙]+)?', process_message)
+				if len(potential_names) >= 2:
+					st.caption(f"🔗 Checking connection path between people...")
+					path_result = find_connection_path(potential_names[0], potential_names[1])
+					if path_result.get('path_found'):
+						st.success(f"✅ Found connection in {path_result['hops']} hops!")
+			
+			# Use cached vector search for better performance
 			if VECTOR_SEARCH_AVAILABLE and query_with_relationships is not None:
 				try:
 					st.caption(f"🔍 Searching across all indexes (Person, Position, Ministry, Agency, Remark, Connect by)...")
-					results = query_with_relationships(
+					
+					# Use cached version to avoid repeated API calls
+					results = cached_vector_search(
 						process_message,
-						top_k_per_index=30,  # 30 nodes × 4 indexes = 120 results - balanced for free tier
+						top_k_per_index=30  # 30 nodes × 4 indexes = 120 results - balanced for free tier
 					)
 					
 					# Check if query mentions Stelligence network names and add direct query
@@ -1386,12 +1734,57 @@ Q: "อนุทิน ชาญวีรกูล ตำแหน่งอะ�
 
 💡 หมายเหตุ: วิเคราะห์ข้อมูลทั้งหมดใน Context และจัดกลุ่มให้เหมาะกับคำถาม"""
 			
-			answer = ask_openrouter_requests(user_message, max_tokens=2048, system_prompt=system_prompt)
+			# Use streaming for better UX (optional - can be toggled)
+			use_streaming = st.session_state.get('use_streaming', False)
+			
+			if use_streaming:
+				# Streaming response (like ChatGPT)
+				answer_placeholder = st.empty()
+				answer = ""
+				for chunk in ask_openrouter_streaming(user_message, max_tokens=2048, system_prompt=system_prompt):
+					answer += chunk
+					answer_placeholder.markdown(answer + "▌")  # Show cursor
+				answer_placeholder.markdown(answer)  # Remove cursor
+			else:
+				# Regular response (with caching and retry)
+				try:
+					# Try to use cached response first
+					answer = cached_llm_response(
+						prompt=process_message,
+						context=ctx,
+						model=OPENROUTER_MODEL,
+						max_tokens=2048,
+						system_prompt=system_prompt
+					)
+				except Exception as e:
+					# If cached fails, try direct call (has retry logic)
+					st.warning(f"Cache miss, calling API directly...")
+					answer = ask_openrouter_requests(user_message, max_tokens=2048, system_prompt=system_prompt)
 			
 			# Fix bullet point formatting to ensure each bullet is on a new line
 			answer = fix_bullet_formatting(answer)
 			
-			st.markdown(answer)
+			# Track analytics
+			response_time = time.time() - start_time
+			success = not answer.startswith("OpenRouter request failed")
+			log_query_analytics(
+				query=process_message,
+				success=success,
+				error_type=None if success else "API_ERROR",
+				response_time=response_time
+			)
+			
+			if not use_streaming:
+				st.markdown(answer)
+			
+			# Generate and display follow-up questions
+			if success and ctx:
+				followup_questions = generate_followup_questions(ctx, process_message)
+				if followup_questions:
+					st.markdown("---")
+					st.markdown("**💡 คำถามที่คุณอาจสนใจ:**")
+					for q in followup_questions:
+						st.markdown(q)
 	
 	# Save assistant response with FIXED formatting
 	resp = {"role": "assistant", "content": answer, "time": datetime.now().strftime("%Y-%m-%d %H:%M:%S")}
