@@ -465,6 +465,15 @@ st.set_page_config(
 	initial_sidebar_state="expanded"
 )
 
+# Force show sidebar on mobile/small screens
+st.markdown("""
+<style>
+	[data-testid="stSidebar"][aria-expanded="false"] {
+		display: block !important;
+	}
+</style>
+""", unsafe_allow_html=True)
+
 # Custom CSS for ChatGPT-like styling
 def apply_custom_css():
 	bg_color = "#0f1419"
@@ -527,6 +536,27 @@ def apply_custom_css():
 		}}
 		
 		/* Welcome card styling */
+		.welcome-container {{
+			background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+			padding: 3rem;
+			border-radius: 1rem;
+			text-align: center;
+			margin: 2rem auto;
+			max-width: 800px;
+		}}
+		
+		.welcome-title {{
+			font-size: 2.5rem;
+			font-weight: 700;
+			color: white;
+			margin-bottom: 1rem;
+		}}
+		
+		.welcome-subtitle {{
+			font-size: 1.25rem;
+			color: rgba(255, 255, 255, 0.9);
+		}}
+		
 		.welcome-card {{
 			background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
 			padding: 3rem;
