@@ -969,7 +969,7 @@ if process_message:
 					st.caption(f"🔍 Searching across all indexes (Person, Position, Ministry, Agency, Remark, Connect by)...")
 					results = query_with_relationships(
 						process_message,
-						top_k_per_index=15,  # Balanced: 15 nodes × 4 indexes = 60 total results max
+						top_k_per_index=30,  # 30 nodes × 4 indexes = ~120 results - balanced for comprehensive coverage
 					)
 					
 					# Check if query mentions Stelligence network names and add direct query
@@ -1386,8 +1386,7 @@ Q: "อนุทิน ชาญวีรกูล ตำแหน่งอะ�
 
 💡 หมายเหตุ: วิเคราะห์ข้อมูลทั้งหมดใน Context และจัดกลุ่มให้เหมาะกับคำถาม"""
 			
-			# Reduced tokens to stay within API limits (15 nodes × 4 indexes should fit comfortably)
-			answer = ask_openrouter_requests(user_message, max_tokens=1024, system_prompt=system_prompt)
+			answer = ask_openrouter_requests(user_message, max_tokens=2048, system_prompt=system_prompt)
 			
 			# Fix bullet point formatting to ensure each bullet is on a new line
 			answer = fix_bullet_formatting(answer)
