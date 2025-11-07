@@ -42,7 +42,7 @@ OPENROUTER_API_KEY = get_config("OPENROUTER_API_KEY") or get_config("OPENAI_API_
 OPENROUTER_API_BASE = get_config("OPENROUTER_API_BASE", get_config("OPENAI_API_BASE", "https://api.openrouter.ai"))
 OPENROUTER_MODEL = get_config("OPENROUTER_MODEL", "deepseek/deepseek-chat")
 
-# Vector/RAG configuration (optional, used by KG/VectorRAG.query_vector_rag)
+# Vector search configuration
 # Use person_vector_index as default since Person is likely the most queried label
 VECTOR_INDEX_NAME = get_config("VECTOR_INDEX_NAME", "person_vector_index")
 VECTOR_NODE_LABEL = get_config("VECTOR_NODE_LABEL", "Person")
