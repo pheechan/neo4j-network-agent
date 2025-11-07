@@ -108,10 +108,11 @@ def get_embeddings_model():
 
 
 @st.cache_data(ttl=3600)  # Cache for 1 hour
-def cached_vector_search(query: str, top_k_per_index: int = 30):
+def cached_vector_search(query: str, top_k_per_index: int = 30, _cache_bypass: bool = False):
 	"""
 	Cached vector search to avoid repeated API calls for same queries.
 	TTL=3600 means cache expires after 1 hour.
+	_cache_bypass: Use different value to force cache miss (e.g., timestamp)
 	"""
 	if VECTOR_SEARCH_AVAILABLE and query_with_relationships is not None:
 		try:
@@ -123,10 +124,11 @@ def cached_vector_search(query: str, top_k_per_index: int = 30):
 
 
 @st.cache_data(ttl=1800)  # Cache for 30 minutes
-def cached_llm_response(prompt: str, context: str, model: str, max_tokens: int = 512, system_prompt: str = None):
+def cached_llm_response(prompt: str, context: str, model: str, max_tokens: int = 512, system_prompt: str = None, _cache_bypass: bool = False):
 	"""
 	Cached LLM responses for identical query+context combinations.
 	Saves API costs and reduces latency for repeat queries.
+	_cache_bypass: Use different value to force cache miss (e.g., timestamp)
 	"""
 	full_prompt = f"{context}\n\n{prompt}" if context else prompt
 	return ask_openrouter_requests(
@@ -1112,6 +1114,19 @@ with st.sidebar:
 		)
 		st.session_state['use_streaming'] = use_streaming
 		
+		use_cache = st.checkbox(
+			"💾 Enable caching",
+			value=st.session_state.get('use_cache', True),
+			help="Cache responses for faster repeat queries. Disable for always fresh answers."
+		)
+		st.session_state['use_cache'] = use_cache
+		
+		if st.button("🗑️ Clear all caches", use_container_width=True):
+			st.cache_data.clear()
+			st.success("✅ All caches cleared!")
+			time.sleep(0.5)
+			st.rerun()
+		
 		st.markdown("**Model Settings:**")
 		st.caption(f"Current model: `{OPENROUTER_MODEL}`")
 		
@@ -1229,8 +1244,9 @@ def render_messages_with_actions(messages: List[Dict], thread_id: int):
 							st.rerun()
 				with col2:
 					if st.button("🔄", key=f"regen_{thread_id}_{idx}", help="Regenerate", use_container_width=True):
-						# Remove this message and regenerate
+						# Remove this message and mark for regeneration (bypass cache)
 						st.session_state.threads[thread_id]["messages"] = messages[:idx]
+						st.session_state['force_regenerate'] = True  # Flag to bypass cache
 						st.rerun()
 
 
@@ -1314,10 +1330,19 @@ if process_message:
 				try:
 					st.caption(f"🔍 Searching across all indexes (Person, Position, Ministry, Agency, Remark, Connect by)...")
 					
-					# Use cached version to avoid repeated API calls
+					# Check if we should bypass cache (regenerate or cache disabled)
+					use_cache = st.session_state.get('use_cache', True)
+					force_regenerate = st.session_state.get('force_regenerate', False)
+					bypass_cache = force_regenerate or not use_cache
+					
+					if bypass_cache:
+						st.caption("🔄 Bypassing cache for fresh results...")
+					
+					# Use cached version to avoid repeated API calls (unless bypassing)
 					results = cached_vector_search(
 						process_message,
-						top_k_per_index=30  # 30 nodes × 4 indexes = 120 results - balanced for free tier
+						top_k_per_index=30,  # 30 nodes × 4 indexes = 120 results - balanced for free tier
+						_cache_bypass=time.time() if bypass_cache else False  # Different value = cache miss
 					)
 					
 					# Check if query mentions Stelligence network names and add direct query
@@ -1736,9 +1761,16 @@ Q: "อนุทิน ชาญวีรกูล ตำแหน่งอะ�
 			
 			# Use streaming for better UX (optional - can be toggled)
 			use_streaming = st.session_state.get('use_streaming', False)
+			use_cache = st.session_state.get('use_cache', True)
+			force_regenerate = st.session_state.get('force_regenerate', False)
+			bypass_cache = force_regenerate or not use_cache
+			
+			# Clear regenerate flag after using it
+			if force_regenerate:
+				st.session_state['force_regenerate'] = False
 			
 			if use_streaming:
-				# Streaming response (like ChatGPT)
+				# Streaming response (like ChatGPT) - always bypasses cache
 				answer_placeholder = st.empty()
 				answer = ""
 				for chunk in ask_openrouter_streaming(user_message, max_tokens=2048, system_prompt=system_prompt):
@@ -1746,20 +1778,26 @@ Q: "อนุทิน ชาญวีรกูล ตำแหน่งอะ�
 					answer_placeholder.markdown(answer + "▌")  # Show cursor
 				answer_placeholder.markdown(answer)  # Remove cursor
 			else:
-				# Regular response (with caching and retry)
-				try:
-					# Try to use cached response first
-					answer = cached_llm_response(
-						prompt=process_message,
-						context=ctx,
-						model=OPENROUTER_MODEL,
-						max_tokens=2048,
-						system_prompt=system_prompt
-					)
-				except Exception as e:
-					# If cached fails, try direct call (has retry logic)
-					st.warning(f"Cache miss, calling API directly...")
+				# Regular response (with optional caching and retry)
+				if bypass_cache:
+					# Direct call without cache
+					st.caption("🔄 Generating fresh response...")
 					answer = ask_openrouter_requests(user_message, max_tokens=2048, system_prompt=system_prompt)
+				else:
+					# Try to use cached response first
+					try:
+						answer = cached_llm_response(
+							prompt=process_message,
+							context=ctx,
+							model=OPENROUTER_MODEL,
+							max_tokens=2048,
+							system_prompt=system_prompt,
+							_cache_bypass=time.time() if bypass_cache else False
+						)
+					except Exception as e:
+						# If cached fails, try direct call (has retry logic)
+						st.warning(f"Cache miss, calling API directly...")
+						answer = ask_openrouter_requests(user_message, max_tokens=2048, system_prompt=system_prompt)
 			
 			# Fix bullet point formatting to ensure each bullet is on a new line
 			answer = fix_bullet_formatting(answer)
