@@ -457,6 +457,44 @@ def ask_openrouter_requests(prompt: str, model: str = OPENROUTER_MODEL, max_toke
 		return f"OpenRouter request failed: {type(e).__name__} {e}"
 
 
+def fix_bullet_formatting(text: str) -> str:
+	"""
+	Fix bullet point formatting to ensure each bullet is on a new line.
+	Converts inline bullets like '• item1 • item2 • item3' to separate lines.
+	"""
+	import re
+	
+	# Split by lines to process each line
+	lines = text.split('\n')
+	fixed_lines = []
+	
+	for line in lines:
+		# Count bullets in this line
+		bullet_count = line.count('•')
+		
+		if bullet_count > 1:
+			# Multiple bullets on same line - split them
+			# Replace ' •' with '\n•' but not the first bullet
+			parts = line.split('•')
+			if len(parts) > 1:
+				# First part before first bullet
+				result = parts[0]
+				# Add each bullet on new line
+				for i, part in enumerate(parts[1:], 1):
+					if part.strip():  # Only add if not empty
+						result += '•' + part.rstrip()
+						if i < len(parts) - 1:  # Not the last one
+							result += '\n'
+				fixed_lines.append(result)
+			else:
+				fixed_lines.append(line)
+		else:
+			# Single bullet or no bullet - keep as is
+			fixed_lines.append(line)
+	
+	return '\n'.join(fixed_lines)
+
+
 ## Streamlit chat UI with modern ChatGPT-like design
 st.set_page_config(
 	page_title="STelligence Network Agent", 
@@ -1341,6 +1379,10 @@ Q: "อนุทิน ชาญวีรกูล ตำแหน่งอะ�
 💡 หมายเหตุ: วิเคราะห์ข้อมูลทั้งหมดใน Context และจัดกลุ่มให้เหมาะกับคำถาม"""
 			
 			answer = ask_openrouter_requests(user_message, max_tokens=2048, system_prompt=system_prompt)
+			
+			# Fix bullet point formatting to ensure each bullet is on a new line
+			answer = fix_bullet_formatting(answer)
+			
 			st.markdown(answer)
 	
 	# Save assistant response
