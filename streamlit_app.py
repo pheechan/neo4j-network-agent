@@ -547,6 +547,31 @@ def apply_custom_css():
 			border-right: 1px solid {border_color};
 		}}
 		
+		/* Hide the weird keyboard arrow text */
+		button[kind="header"]::before {{
+			content: "☰" !important;
+			font-family: Arial, sans-serif !important;
+		}}
+		
+		button[kind="header"] {{
+			font-size: 0 !important;
+		}}
+		
+		button[kind="header"]::before {{
+			font-size: 1.5rem !important;
+		}}
+		
+		/* Hide collapsed control text */
+		[data-testid="collapsedControl"] {{
+			font-size: 0 !important;
+		}}
+		
+		[data-testid="collapsedControl"]::before {{
+			content: "☰" !important;
+			font-size: 1.5rem !important;
+			font-family: Arial, sans-serif !important;
+		}}
+		
 		[data-testid="stSidebar"] .stButton button {{
 			width: 100%;
 			background-color: transparent;
