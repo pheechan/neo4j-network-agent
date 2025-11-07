@@ -35,14 +35,8 @@ def fix_bullet_formatting(text: str) -> str:
 	
 	return '\n'.join(fixed_lines)
 
-# Test with your example
-test_text = """บุคคลที่เกี่ยวข้องกับอนุทิน ชาญวีรกูล จากข้อมูลที่มี:
-
-• สุวัฒน์ อ้นใจกล้า - ปลัดกระทรวงกลาโหม (Connect by) • พี่เท่ห์ (MABE) - มีความสัมพันธ์กับตำแหน่งอธิบดีและ CEO (Connect by) • พี่โด่ง - รัฐมนตรี (รมต.) ในสำนักงานปลัด (Connect by และ known by Santisook) • Santisook - มีความสัมพันธ์กับผู้อำนวยการและเจ้าเจ้าหน้าที่สภา (Connect by)
-
-เครือข่ายหลักที่สามารถเชื่อมต่อถึงอนุทิน ชาญวีรกูล:
-
-ผ่านระบบราชการ: สุวัฒน์ อ้นใจกล้า (ปลัดกระทรวงกลาโหม)"""
+# Test with exact format from user's output
+test_text = """บุคคลที่เกี่ยวข้อง: • พี่โด่ง - รัฐมนตรีประจำสำนักงานปลัด • พี่บอย (CGC) - รัฐมนตรี • อภัชัย (IOD, วตท) - รัฐมนตรี"""
 
 print("BEFORE:")
 print(test_text)
