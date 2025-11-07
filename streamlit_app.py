@@ -542,6 +542,15 @@ def apply_custom_css():
 			border-right: 1px solid {border_color};
 		}}
 		
+		/* Hide sidebar collapse button icons */
+		[data-testid="collapsedControl"] {{
+			display: none;
+		}}
+		
+		button[kind="header"] {{
+			display: none;
+		}}
+		
 		[data-testid="stSidebar"] .stButton button {{
 			width: 100%;
 			background-color: transparent;
