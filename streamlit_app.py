@@ -494,30 +494,33 @@ st.markdown("""
 
 # Custom CSS for ChatGPT-like styling
 def apply_custom_css():
-	bg_color = "#0f1419"
-	secondary_bg = "#1a1f2e"
-	text_color = "#ffffff"
-	border_color = "#2d3748"
-	input_bg = "#2d3748"
-	message_bg = "#2d3748"
+	# Swap colors: darker sidebar like ChatGPT, lighter main area
+	sidebar_bg = "#0d1117"  # Very dark like ChatGPT sidebar
+	main_bg = "#212121"     # Lighter than sidebar
+	text_color = "#ececec"
+	border_color = "#3d4451"
+	input_bg = "#2f2f2f"
+	user_msg_bg = "#2f2f2f"
+	assistant_msg_bg = "#212121"
 	hover_bg = "#374151"
+	button_color = "#565869"
 	
 	st.markdown(f"""
 	<style>
 		/* Main container */
 		.stApp {{
-			background-color: {bg_color};
+			background-color: {main_bg};
 		}}
 		
-		/* Sidebar styling */
+		/* Sidebar styling - darker like ChatGPT */
 		[data-testid="stSidebar"] {{
-			background-color: {secondary_bg};
+			background-color: {sidebar_bg} !important;
 			border-right: 1px solid {border_color};
 		}}
 		
 		[data-testid="stSidebar"] .stButton button {{
 			width: 100%;
-			background-color: {input_bg};
+			background-color: transparent;
 			color: {text_color};
 			border: 1px solid {border_color};
 			border-radius: 0.5rem;
@@ -534,11 +537,66 @@ def apply_custom_css():
 			color: {text_color};
 		}}
 		
-		/* Chat messages */
+		/* Left-right chat layout */
+		/* Assistant messages on the left */
+		[data-testid="stChatMessage"][data-testid*="assistant"] {{
+			justify-content: flex-start;
+			max-width: 70%;
+			margin-right: auto;
+			margin-left: 0;
+		}}
+		
+		/* User messages on the right */
+		[data-testid="stChatMessage"][data-testid*="user"] {{
+			justify-content: flex-end;
+			max-width: 70%;
+			margin-left: auto;
+			margin-right: 0;
+		}}
+		
+		/* Chat message styling */
 		[data-testid="stChatMessageContent"] {{
-			background-color: {message_bg};
 			border-radius: 1rem;
 			padding: 1rem;
+		}}
+		
+		/* Assistant message background */
+		.stChatMessage:has([data-testid="chatAvatarIcon-assistant"]) [data-testid="stChatMessageContent"] {{
+			background-color: {assistant_msg_bg};
+			border: 1px solid {border_color};
+		}}
+		
+		/* User message background */
+		.stChatMessage:has([data-testid="chatAvatarIcon-user"]) [data-testid="stChatMessageContent"] {{
+			background-color: {user_msg_bg};
+			border: 1px solid {border_color};
+		}}
+		
+		/* Action buttons styling */
+		.action-buttons {{
+			display: flex;
+			gap: 0.5rem;
+			margin-top: 0.5rem;
+			opacity: 0.7;
+		}}
+		
+		.action-buttons:hover {{
+			opacity: 1;
+		}}
+		
+		.action-btn {{
+			background-color: transparent;
+			border: 1px solid {button_color};
+			color: {text_color};
+			padding: 0.25rem 0.75rem;
+			border-radius: 0.5rem;
+			font-size: 0.8rem;
+			cursor: pointer;
+			transition: all 0.2s;
+		}}
+		
+		.action-btn:hover {{
+			background-color: {button_color};
 		}}
 		
 		/* Input area */
@@ -575,18 +633,8 @@ def apply_custom_css():
 			color: rgba(255, 255, 255, 0.9);
 		}}
 		
-		.welcome-card {{
-			background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
-			padding: 3rem;
-			border-radius: 1rem;
-			text-align: center;
-			margin: 2rem auto;
-			max-width: 800px;
-			color: white;
-		}}
-		
 		.feature-card {{
-			background-color: {message_bg};
+			background-color: {input_bg};
 			padding: 1.5rem;
 			border-radius: 0.75rem;
 			border: 1px solid {border_color};
@@ -725,7 +773,7 @@ with st.sidebar:
 
 
 def render_messages_with_actions(messages: List[Dict], thread_id: int):
-	"""Render messages in clean style without action buttons"""
+	"""Render messages with edit and regenerate buttons for assistant messages"""
 	for idx, m in enumerate(messages):
 		role = m.get("role")
 		content = m.get("content")
@@ -736,19 +784,23 @@ def render_messages_with_actions(messages: List[Dict], thread_id: int):
 		else:
 			with st.chat_message("assistant"):
 				st.markdown(content)
+				
+				# Add small action buttons below assistant messages
+				col1, col2, col3 = st.columns([1, 1, 10])
+				with col1:
+					if st.button("✏️", key=f"edit_{thread_id}_{idx}", help="Edit", use_container_width=True):
+						st.info("Edit functionality coming soon!")
+				with col2:
+					if st.button("🔄", key=f"regen_{thread_id}_{idx}", help="Regenerate", use_container_width=True):
+						# Remove this message and regenerate
+						st.session_state.threads[thread_id]["messages"] = messages[:idx]
+						st.rerun()
 
 
 # Main chat interface
 # Get current thread
 tid = st.session_state.current_thread
 current_thread = st.session_state.threads[tid]
-
-# Add a note about sidebar if it's collapsed
-st.markdown("""
-<div style="background-color: #1a1f2e; padding: 1rem; border-radius: 0.5rem; margin-bottom: 1rem; text-align: center;">
-	👈 <strong>Click the arrow in the top-left corner to open the sidebar menu</strong>
-</div>
-""", unsafe_allow_html=True)
 
 # Show welcome message if no messages in thread
 if not current_thread["messages"]:
