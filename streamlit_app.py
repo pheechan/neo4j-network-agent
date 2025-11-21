@@ -483,12 +483,21 @@ def find_connection_path(person_a: str, person_b: str, max_hops: int = 10, use_h
 						'total_connections': record['total_connections']
 					}
 				else:
+					# No path found - get info about target person instead
+					st.warning("⚠️ ไม่พบเส้นทางเชื่อมต่อโดยตรง (from healed query)")
+					st.info("💡 แสดงข้อมูลพื้นฐานของบุคคลเป้าหมายแทน...")
+					st.write(f"🔍 DEBUG: Searching for person: '{person_b}'")
+					target_info = get_person_basic_info(person_b)
+					st.write(f"📊 DEBUG: Result = {target_info}")
+					
 					return {
 						'path_found': False,
 						'hops': None,
 						'path_nodes': [],
 						'path_relationships': [],
-						'total_connections': 0
+						'total_connections': 0,
+						'show_target_info': True,
+						'target_info': target_info
 					}
 			else:
 				st.error(f"Query failed: {result['error']}")
