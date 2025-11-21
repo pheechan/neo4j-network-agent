@@ -1510,6 +1510,36 @@ if process_message:
 						st.caption(f"⚠️ No direct path found within 10 hops")
 						if path_result.get('error'):
 							st.warning(f"Error: {path_result['error']}")
+						
+						# Add explicit NO PATH instruction to context
+						path_context_addition = f"""
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+**❌ NO CONNECTION PATH FOUND:**
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+**Query:** Find path from "{potential_names[0]}" to "{potential_names[1]}"
+
+**Result:** ❌ NO PATH FOUND within 10 hops
+
+**⚠️ CRITICAL:** Do NOT infer or create a path! 
+- These two people are NOT connected in the database
+- Even if you see them connected to similar networks/organizations
+- Do NOT assume they share connections
+- State clearly: "ไม่พบเส้นทางเชื่อมต่อระหว่าง {potential_names[0]} และ {potential_names[1]} ในระบบ"
+
+**DO NOT:**
+- Create fake paths based on shared networks
+- Assume connections that aren't explicitly in the data
+- Say they connect through any organization/network
+
+**DO:**
+- State clearly no path was found
+- Suggest they may not be connected
+- Offer to search for alternative connections
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+"""
+						st.caption(f"⚠️ Added NO PATH warning to context")
 			
 			# Use cached vector search for better performance
 			if VECTOR_SEARCH_AVAILABLE and query_with_relationships is not None:
