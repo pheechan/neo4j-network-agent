@@ -360,12 +360,19 @@ def get_person_basic_info(person_name: str) -> dict:
 	OPTIONAL MATCH (p)-[:work_as]->(pos:Position)
 	OPTIONAL MATCH (p)-[:work_at]->(agency:Agency)
 	OPTIONAL MATCH (p)-[:under]->(ministry:Ministry)
+	OPTIONAL MATCH (p)-[:work_at]->(agency2:Agency)-[:under]->(ministry2:Ministry)
 	
 	WITH p, 
 	     collect(DISTINCT pos.ตำแหน่ง) as positions,
 	     collect(DISTINCT agency.หน่วยงาน) as agencies,
-	     collect(DISTINCT ministry.กระทรวง) as ministries,
+	     collect(DISTINCT ministry.กระทรวง) + collect(DISTINCT ministry2.กระทรวง) as all_ministries,
 	     size([(p)-[]-() | 1]) as total_connections
+	
+	WITH p, 
+	     positions,
+	     agencies,
+	     [m IN all_ministries WHERE m IS NOT NULL | m] as ministries,
+	     total_connections
 	
 	RETURN p.`ชื่อ-นามสกุล` as name,
 	       positions,
