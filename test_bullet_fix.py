@@ -1,10 +1,13 @@
-import re
+# -*- coding: utf-8 -*-
+"""Test bullet formatting fix"""
 
 def fix_bullet_formatting(text: str) -> str:
 	"""
 	Fix bullet point formatting to ensure each bullet is on a new line.
 	Converts inline bullets like '• item1 • item2 • item3' to separate lines.
 	"""
+	import re
+	
 	# Split by lines to process each line
 	lines = text.split('\n')
 	fixed_lines = []
@@ -15,18 +18,16 @@ def fix_bullet_formatting(text: str) -> str:
 		
 		if bullet_count > 1:
 			# Multiple bullets on same line - split them
-			# Replace ' •' with '\n•' but not the first bullet
 			parts = line.split('•')
 			if len(parts) > 1:
-				# First part before first bullet
-				result = parts[0]
-				# Add each bullet on new line
-				for i, part in enumerate(parts[1:], 1):
+				# First part before first bullet (usually empty or heading)
+				if parts[0].strip():
+					fixed_lines.append(parts[0].strip())
+				
+				# Add each bullet on its own line
+				for part in parts[1:]:
 					if part.strip():  # Only add if not empty
-						result += '•' + part.rstrip()
-						if i < len(parts) - 1:  # Not the last one
-							result += '\n'
-				fixed_lines.append(result)
+						fixed_lines.append('• ' + part.strip())
 			else:
 				fixed_lines.append(line)
 		else:
@@ -35,13 +36,15 @@ def fix_bullet_formatting(text: str) -> str:
 	
 	return '\n'.join(fixed_lines)
 
-# Test with exact format from user's output
-test_text = """บุคคลที่เกี่ยวข้อง: • พี่โด่ง - รัฐมนตรีประจำสำนักงานปลัด • พี่บอย (CGC) - รัฐมนตรี • อภัชัย (IOD, วตท) - รัฐมนตรี"""
+# Test with your example
+test_text = """อนุทิน ชาญวีรกูล ดำรงตำแหน่ง:
 
-print("BEFORE:")
+• นายกรัฐมนตรี • รัฐมนตรีว่าการ (ไม่มีข้อมูลกระทรวงในระบบ)"""
+
+print("BEFORE FIX:")
 print(test_text)
 print("\n" + "="*60 + "\n")
 
-fixed = fix_bullet_formatting(test_text)
-print("AFTER:")
-print(fixed)
+fixed_text = fix_bullet_formatting(test_text)
+print("AFTER FIX:")
+print(fixed_text)
