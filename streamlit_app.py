@@ -798,18 +798,16 @@ def fix_bullet_formatting(text: str) -> str:
 		
 		if bullet_count > 1:
 			# Multiple bullets on same line - split them
-			# Replace ' •' with '\n•' but not the first bullet
 			parts = line.split('•')
 			if len(parts) > 1:
-				# First part before first bullet
-				result = parts[0]
-				# Add each bullet on new line
-				for i, part in enumerate(parts[1:], 1):
+				# First part before first bullet (usually empty or heading)
+				if parts[0].strip():
+					fixed_lines.append(parts[0].strip())
+				
+				# Add each bullet on its own line
+				for part in parts[1:]:
 					if part.strip():  # Only add if not empty
-						result += '•' + part.rstrip()
-						if i < len(parts) - 1:  # Not the last one
-							result += '\n'
-				fixed_lines.append(result)
+						fixed_lines.append('• ' + part.strip())
 			else:
 				fixed_lines.append(line)
 		else:
