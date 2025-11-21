@@ -58,8 +58,8 @@ NEO4J_PWD = get_config("NEO4J_PASSWORD", "")
 NEO4J_DB = get_config("NEO4J_DATABASE", "neo4j")
 
 OPENROUTER_API_KEY = get_config("OPENROUTER_API_KEY") or get_config("OPENAI_API_KEY")
-OPENROUTER_API_BASE = get_config("OPENROUTER_API_BASE", get_config("OPENAI_API_BASE", "https://api.openrouter.ai"))
-OPENROUTER_MODEL = get_config("OPENROUTER_MODEL", "google/gemini-2.0-flash-exp:free")
+OPENROUTER_API_BASE = get_config("OPENROUTER_BASE_URL", get_config("OPENROUTER_API_BASE", get_config("OPENAI_API_BASE", "https://openrouter.ai/api/v1")))
+OPENROUTER_MODEL = get_config("OPENROUTER_MODEL", "deepseek/deepseek-chat")
 
 # Vector search configuration
 # Use person_vector_index as default since Person is likely the most queried label
