@@ -202,8 +202,8 @@ def find_connection_path(person_a: str, person_b: str, max_hops: int = 3) -> dic
 			# Find ALL shortest paths, then pick the one with most intermediate connections
 			query = f"""
 			MATCH (a:Person), (b:Person)
-			WHERE a.name CONTAINS $person_a OR a.`ชื่อ` CONTAINS $person_a
-			  AND b.name CONTAINS $person_b OR b.`ชื่อ` CONTAINS $person_b
+			WHERE (a.name CONTAINS $person_a OR a.`ชื่อ` CONTAINS $person_a OR a.`ชื่อ-นามสกุล` CONTAINS $person_a)
+			  AND (b.name CONTAINS $person_b OR b.`ชื่อ` CONTAINS $person_b OR b.`ชื่อ-นามสกุล` CONTAINS $person_b)
 			WITH a, b
 			MATCH path = allShortestPaths((a)-[*..{max_hops}]-(b))
 			WITH path, 
@@ -219,7 +219,7 @@ def find_connection_path(person_a: str, person_b: str, max_hops: int = 3) -> dic
 			// Return path with node details
 			RETURN path, hops,
 			       [node in path_nodes | {{
-			           name: coalesce(node.name, node.`ชื่อ`, 'Unknown'), 
+			           name: coalesce(node.`ชื่อ-นามสกุล`, node.name, node.`ชื่อ`, 'Unknown'), 
 			           labels: labels(node),
 			           connections: size([(node)-[]-() | 1])
 			       }}] as path_nodes,
