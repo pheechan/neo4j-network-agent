@@ -2298,37 +2298,47 @@ Q: "อนุทิน ชาญวีรกูล ตำแหน่งอะ�
 			
 			# Apply concise summarization if enabled
 			use_concise_mode = st.session_state.get('use_concise_mode', False)
-			if use_concise_mode and ENHANCED_FEATURES_AVAILABLE and CypherResultSummarizer and results:
+			if use_concise_mode and ENHANCED_FEATURES_AVAILABLE and CypherResultSummarizer:
 				try:
 					st.caption("✨ Applying concise mode...")
-					summarizer = CypherResultSummarizer(lambda p: ask_openrouter_requests(p, model=OPENROUTER_MODEL, max_tokens=300))
 					
-					# If path result exists, use specialized path summarization
-					if path_context_addition and 'path_found' in str(path_context_addition) and '✅' in str(path_context_addition):
-						# Extract path data for specialized summarization
-						path_match = None
-						if 'path_result' in locals() and path_result and path_result.get('path_found'):
-							path_match = path_result
-							person_a = potential_names[0] if 'potential_names' in locals() and len(potential_names) >= 2 else None
-							person_b = potential_names[1] if 'potential_names' in locals() and len(potential_names) >= 2 else None
-							
-							if person_a and person_b:
-								concise_answer = summarize_path_result(
-									path_match, 
-									person_a, 
-									person_b,
-									lambda p: ask_openrouter_requests(p, model=OPENROUTER_MODEL, max_tokens=300)
-								)
-								answer = concise_answer
-								st.caption("✅ Used specialized path summarization")
+					# Check if this is a path query with results
+					is_path_query = 'path_result' in locals() and path_result and path_result.get('path_found')
 					
-					# Otherwise use general summarization
-					if 'concise_answer' not in locals():
-						# Prepare results for summarization (remove embeddings)
-						clean_results = [remove_large_properties(r) for r in results[:20]]  # Limit to 20 for context
-						concise_answer = summarizer.summarize(process_message, clean_results)
+					if is_path_query:
+						# Use specialized path summarization
+						person_a = potential_names[0] if 'potential_names' in locals() and len(potential_names) >= 2 else None
+						person_b = potential_names[1] if 'potential_names' in locals() and len(potential_names) >= 2 else None
+						
+						if person_a and person_b:
+							concise_answer = summarize_path_result(
+								path_result, 
+								person_a, 
+								person_b,
+								lambda p: ask_openrouter_requests(p, model=OPENROUTER_MODEL, max_tokens=300)
+							)
+							answer = concise_answer
+							st.caption("✅ Used specialized path summarization")
+					else:
+						# For general queries, summarize the full answer instead of raw results
+						# This preserves all the context and analysis already done by the main LLM
+						summary_prompt = f"""Summarize this answer concisely (max 100 words Thai, 150 English):
+
+Original Question: {process_message}
+
+Full Answer:
+{answer}
+
+Generate a concise summary that preserves key facts and names. Answer in the same language as the question."""
+						
+						concise_answer = ask_openrouter_requests(
+							summary_prompt, 
+							model=OPENROUTER_MODEL, 
+							max_tokens=300
+						)
 						answer = concise_answer
 						st.caption("✅ Concise summary generated")
+						
 				except Exception as e:
 					st.caption(f"⚠️ Summarization failed, using full answer: {str(e)[:100]}")
 			
