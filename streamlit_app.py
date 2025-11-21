@@ -511,7 +511,9 @@ def find_connection_path(person_a: str, person_b: str, max_hops: int = 10, use_h
 				# No path found - get info about target person instead
 				st.warning("⚠️ ไม่พบเส้นทางเชื่อมต่อโดยตรง")
 				st.info("💡 แสดงข้อมูลพื้นฐานของบุคคลเป้าหมายแทน...")
+				st.write(f"🔍 DEBUG: Searching for person: '{person_b}'")
 				target_info = get_person_basic_info(person_b)
+				st.write(f"📊 DEBUG: Result = {target_info}")
 				
 				return {
 					'path_found': False,
