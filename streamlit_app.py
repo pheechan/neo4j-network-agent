@@ -265,8 +265,8 @@ def find_connection_path(person_a: str, person_b: str, max_hops: int = 10) -> di
 	try:
 		driver = get_driver()
 		with driver.session(database=NEO4J_DB) as session:
-			# Find ALL shortest paths, then EXPAND to show actual Person nodes
-			# If path goes through Connect_by nodes, find the actual people in that network
+			# Find ALL shortest paths through ANY node type
+			# This allows paths through Agency, Position, Ministry, Connect_by, etc.
 			query = f"""
 			MATCH (a:Person), (b:Person)
 			WHERE (a.name CONTAINS $person_a OR a.`ชื่อ` CONTAINS $person_a OR a.`ชื่อ-นามสกุล` CONTAINS $person_a)
@@ -277,28 +277,27 @@ def find_connection_path(person_a: str, person_b: str, max_hops: int = 10) -> di
 			     length(path) as hops,
 			     nodes(path) as all_nodes,
 			     relationships(path) as path_rels
-			// Filter to only Person nodes for display
-			WITH path, hops, 
-			     [node in all_nodes WHERE 'Person' IN labels(node)] as person_nodes,
-			     all_nodes,
-			     path_rels
-			// Calculate connection count for Person nodes only
-			UNWIND person_nodes as node
-			WITH path, hops, person_nodes, all_nodes, path_rels, node,
+			// Calculate total connections for all nodes in path
+			UNWIND all_nodes as node
+			WITH path, hops, all_nodes, path_rels, node,
 			     size([(node)-[]-() | 1]) as node_connections
-			WITH path, hops, person_nodes, all_nodes, path_rels,
+			WITH path, hops, all_nodes, path_rels,
 			     sum(node_connections) as total_connections
-			// Return path with PERSON node details only
+			// Return path with ALL node details (Person, Agency, Position, etc.)
 			RETURN path, hops,
-			       [node in person_nodes | {{
+			       [node in all_nodes | {{
 			           name: coalesce(node.`ชื่อ-นามสกุล`, node.name, node.`ชื่อ`, 'Unknown'), 
 			           labels: labels(node),
-			           connections: size([(node)-[]-() | 1])
+			           connections: size([(node)-[]-() | 1]),
+			           type: CASE 
+			               WHEN 'Person' IN labels(node) THEN 'person'
+			               WHEN 'Agency' IN labels(node) THEN 'agency'
+			               WHEN 'Position' IN labels(node) THEN 'position'
+			               WHEN 'Ministry' IN labels(node) THEN 'ministry'
+			               WHEN 'Connect_by' IN labels(node) THEN 'network'
+			               ELSE 'other'
+			           END
 			       }}] as path_nodes,
-			       [node in all_nodes | {{
-			           name: coalesce(node.`ชื่อ-นามสกุล`, node.name, node.`ชื่อ`, 'N/A'),
-			           labels: labels(node)
-			       }}] as all_nodes_info,
 			       [rel in path_rels | type(rel)] as path_rels,
 			       total_connections
 			ORDER BY hops ASC, total_connections DESC
@@ -312,8 +311,7 @@ def find_connection_path(person_a: str, person_b: str, max_hops: int = 10) -> di
 				return {
 					'path_found': True,
 					'hops': record['hops'],
-					'path_nodes': record['path_nodes'],  # Person nodes only
-					'all_nodes': record.get('all_nodes_info', []),  # All nodes including Connect_by
+					'path_nodes': record['path_nodes'],  # ALL nodes (Person, Agency, Position, etc.)
 					'path_relationships': record['path_rels'],
 					'total_connections': record['total_connections']
 				}
@@ -1447,24 +1445,33 @@ if process_message:
 					if path_result.get('path_found'):
 						st.success(f"✅ Found connection in {path_result['hops']} hops!")
 						
-						# Check if path has ONLY 2 people (direct connection through network node)
-						person_count = len(path_result['path_nodes'])
-						all_nodes = path_result.get('all_nodes', [])
+						# Separate nodes by type
+						all_nodes = path_result['path_nodes']
+						person_nodes = [n for n in all_nodes if n.get('type') == 'person']
+						non_person_nodes = [n for n in all_nodes if n.get('type') != 'person']
 						
 						# Add path information to context for LLM
 						path_nodes_info = []
-						for node in path_result['path_nodes']:
+						for i, node in enumerate(all_nodes):
+							node_type = node.get('type', 'unknown')
 							labels_str = ', '.join(node.get('labels', []))
-							path_nodes_info.append(f"- **{node['name']}** ({labels_str}) - Connections: {node['connections']}")
+							
+							# Format based on node type
+							if node_type == 'person':
+								path_nodes_info.append(f"- **{node['name']}** (👤 Person, {node['connections']} connections)")
+							elif node_type == 'agency':
+								path_nodes_info.append(f"- **{node['name']}** (🏢 Agency)")
+							elif node_type == 'position':
+								path_nodes_info.append(f"- **{node['name']}** (💼 Position)")
+							elif node_type == 'ministry':
+								path_nodes_info.append(f"- **{node['name']}** (🏛️ Ministry)")
+							elif node_type == 'network':
+								path_nodes_info.append(f"- **{node['name']}** (🌐 Network)")
+							else:
+								path_nodes_info.append(f"- **{node['name']}** ({labels_str})")
 						
-						# Check if there are intermediate network nodes
-						intermediate_note = ""
-						if person_count == 2 and len(all_nodes) > 2:
-							# They connect through a network/organization
-							network_nodes = [n for n in all_nodes if 'Person' not in n.get('labels', [])]
-							if network_nodes:
-								network_names = ', '.join([n['name'] for n in network_nodes if n['name'] != 'N/A'])
-								intermediate_note = f"\n**⚠️ NOTE:** Only 2 people in path, but they connect through: {network_names}\n**This means they share the same network/organization, not a person-to-person connection.**\n"
+						# Create path summary
+						path_summary = ' → '.join([n['name'] for n in all_nodes])
 						
 						path_context_addition = f"""
 
@@ -1476,21 +1483,29 @@ if process_message:
 
 **Path Length:** {path_result['hops']} hops (shortest path)
 
-**Number of People in Path:** {person_count} people
-{intermediate_note}
-**Total Intermediate Connections:** {path_result['total_connections']}
+**Path Type:** {"Person-to-person chain" if len(non_person_nodes) == 0 else "Mixed path (people + organizations/networks)"}
 
-**Full Path (People Only):** {' → '.join([n['name'] for n in path_result['path_nodes']])}
+**Number of Nodes:** {len(all_nodes)} total ({len(person_nodes)} people, {len(non_person_nodes)} organizations/networks)
 
-**Person Details (with connection counts):**
+**Total Connections:** {path_result['total_connections']}
+
+**Complete Path:**
+{path_summary}
+
+**Node Details:**
 {chr(10).join(path_nodes_info)}
 
 **Relationship Types:** {' → '.join(path_result['path_relationships'])}
 
-**⚠️ IMPORTANT:** If only 2 people, explain they connect through SHARED NETWORK, not through other people!
+**⚠️ DISPLAY INSTRUCTIONS:**
+- Show ALL nodes in the path (people AND organizations)
+- Use numbered list format
+- Mark node type with emoji (👤 person, 🏢 agency, 💼 position, 🌐 network, 🏛️ ministry)
+- For people: show connection count
+- For organizations: explain they are shared connection points
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 """
-						st.caption(f"📊 Path details added to context for LLM")
+						st.caption(f"📊 Path details added to context ({len(all_nodes)} nodes)")
 					else:
 						st.caption(f"⚠️ No direct path found within 10 hops")
 						if path_result.get('error'):
@@ -1733,46 +1748,52 @@ Total intermediate connections: 22
 
 **When displaying path - USE THIS EXACT FORMAT:**
 
-**CASE 1: Path with Multiple People (3+ people):**
+**Path shows ALL nodes (people + organizations/networks) - Display them properly:**
 
-**🎯 เส้นทางที่แนะนำ:**
+**🎯 เส้นทางการเชื่อมต่อ:**
 
 **ระยะทาง:** 3 ขั้น (shortest path)
-**Connections รวมของคนกลาง:** 22 connections
 
 **เส้นทาง:**
-1. **Boss** (ต้นทาง)
+1. 👤 **อนุทิน ชาญวีรกูล** (ต้นทาง)
+   - Connections: 15 🌟
+   - ตำแหน่ง: รัฐมนตรีว่าการกระทรวงมหาดไทย
    
-2. **Person3** (คนกลาง)
-   - Connections: 10 🌟
-   - ตำแหน่ง: [position if available]
+2. 🏢 **กระทรวงมหาดไทย** (หน่วยงานที่เชื่อมโยง)
+   - ทั้งสองคนทำงานในหน่วยงานเดียวกัน
    
-3. **Person4** (คนกลาง) 
-   - Connections: 12 🌟🌟 ← Most connected!
-   - ตำแหน่ง: [position if available]
+3. 👤 **Person3** (คนกลาง)
+   - Connections: 12 🌟🌟
+   - ตำแหน่ง: ปลัดกระทรวง
    
-4. **พี่โด่ง** (เป้าหมาย)
+4. 🌐 **Santisook Network** (เครือข่ายที่เชื่อมโยง)
+   - ทั้งสองคนเป็นสมาชิกเครือข่ายเดียวกัน
+   
+5. 👤 **พี่โด่ง** (เป้าหมาย)
+   - Connections: 8 🌟
+   - เครือข่าย: Santisook
 
-**สรุป:** เส้นทางนี้ผ่านคนที่มี connections สูง ทำให้มีโอกาสติดต่อสำเร็จสูง
+**สรุป:** เส้นทางนี้ผ่านทั้งบุคคลและองค์กร/เครือข่ายที่เชื่อมโยง ทำให้มีหลายช่องทางในการติดต่อ
 
-**CASE 2: Direct Connection Through Shared Network (only 2 people):**
+**Node Type Icons to Use:**
+- 👤 Person (บุคคล)
+- 🏢 Agency (หน่วยงาน)
+- 💼 Position (ตำแหน่ง)
+- 🏛️ Ministry (กระทรวง)
+- 🌐 Network (เครือข่าย)
 
-**🎯 ความสัมพันธ์:**
+**Display Rules:**
+1. Show ALL nodes in order (don't skip organizations)
+2. For PERSON nodes: show connections and position
+3. For AGENCY/MINISTRY nodes: explain it's a shared workplace
+4. For NETWORK nodes: explain it's a shared network/group
+5. For POSITION nodes: explain it's a shared role type
 
-**ระยะทาง:** 2 ขั้น (direct through shared network)
+❌ DON'T skip intermediate organizations
+❌ DON'T show only people
 
-**อนุทิน ชาญวีรกูล** และ **พี่โด่ง** เชื่อมต่อกันผ่านเครือข่ายเดียวกัน: **Santisook**
-
-⚠️ **หมายเหตุ:** ไม่มีคนกลาง แต่ทั้งสองคนอยู่ในเครือข่ายเดียวกัน ทำให้สามารถติดต่อกันได้โดยตรงผ่านเครือข่ายนี้
-
-**สรุป:** ทั้งสองคนเป็นส่วนหนึ่งของเครือข่าย Santisook เดียวกัน ทำให้สามารถติดต่อกันได้โดยตรง
-
-❌ DON'T show messy format like:
-"อนุทิน ชาญวีรกูล
-พี่เต๊ะ (มี 2 connections: อธิบดี, Santisook)
-พี่โด่ง"
-
-✅ DO use clear numbered list with proper sections and spacing
+✅ DO show complete path with all node types
+✅ DO explain what each organization/network represents
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 
 ⚠️ **CRITICAL RULE #2 - Always Include Full Ministry Name in Positions!**
