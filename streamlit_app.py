@@ -1340,11 +1340,19 @@ if process_message:
 			if intent['is_relationship_query']:
 				# Try to extract person names for path finding
 				import re
-				# Improved regex to find Thai names with English names
-				potential_names = re.findall(r'[ก-๙]+(?:\s+[ก-๙]+)?|[A-Za-z]+(?:\s+[A-Za-z]+)?', process_message)
-				# Filter out common Thai words
-				filter_words = ['หา', 'จาก', 'ไป', 'ที่', 'สั้น', 'ที่สุด', 'โดย', 'เลือก', 'ผ่าน', 'มาก', 'ระบุ', 'เต็ม', 'และ', 'ของ', 'แต่', 'ละ', 'คน', 'ใน']
-				potential_names = [name for name in potential_names if name not in filter_words and len(name) > 2]
+				
+				# First try to extract quoted names (most reliable)
+				quoted_names = re.findall(r'"([^"]+)"', process_message)
+				
+				if len(quoted_names) >= 2:
+					# Use quoted names
+					potential_names = quoted_names[:2]
+				else:
+					# Fallback: extract Thai/English names and filter
+					potential_names = re.findall(r'[ก-๙]+(?:\s+[ก-๙]+)+|พี่[ก-๙]+', process_message)
+					# Filter out common Thai words/phrases
+					filter_words = ['หา', 'จาก', 'ไป', 'ที่', 'สั้น', 'ที่สุด', 'โดย', 'เลือก', 'ผ่าน', 'มาก', 'ระบุ', 'เต็ม', 'และ', 'ของ', 'แต่', 'ละ', 'คน', 'ใน', 'เส้นทาง']
+					potential_names = [name for name in potential_names if name not in filter_words and len(name) > 2]
 				
 				if len(potential_names) >= 2:
 					st.caption(f"🔗 Checking connection path between: {potential_names[0]} → {potential_names[1]}")
