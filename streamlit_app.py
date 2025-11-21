@@ -357,14 +357,14 @@ def get_person_basic_info(person_name: str) -> dict:
 	   OR p.`ชื่อ` CONTAINS $person_name 
 	   OR p.`ชื่อ-นามสกุล` CONTAINS $person_name
 	
-	OPTIONAL MATCH (p)-[:ดำรงตำแหน่ง]->(pos:Position)
-	OPTIONAL MATCH (pos)-[:สังกัด]->(agency:Agency)
-	OPTIONAL MATCH (agency)-[:สังกัด]->(ministry:Ministry)
+	OPTIONAL MATCH (p)-[:work_as]->(pos:Position)
+	OPTIONAL MATCH (p)-[:work_at]->(agency:Agency)
+	OPTIONAL MATCH (p)-[:under]->(ministry:Ministry)
 	
 	WITH p, 
 	     collect(DISTINCT pos.ตำแหน่ง) as positions,
-	     collect(DISTINCT agency.`ชื่อหน่วยงาน`) as agencies,
-	     collect(DISTINCT ministry.`ชื่อกระทรวง`) as ministries,
+	     collect(DISTINCT agency.หน่วยงาน) as agencies,
+	     collect(DISTINCT ministry.กระทรวง) as ministries,
 	     size([(p)-[]-() | 1]) as total_connections
 	
 	RETURN p.`ชื่อ-นามสกุล` as name,
