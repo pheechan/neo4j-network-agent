@@ -1336,16 +1336,56 @@ if process_message:
 				st.caption(f"🎯 Detected query type: {intent['intent_type']}")
 			
 			# Check for multi-hop path queries
+			path_context_addition = ""
 			if intent['is_relationship_query']:
 				# Try to extract person names for path finding
 				import re
-				# Simple regex to find Thai names (this could be improved)
-				potential_names = re.findall(r'[ก-๙]+(?:\s+[ก-๙]+)?', process_message)
+				# Improved regex to find Thai names with English names
+				potential_names = re.findall(r'[ก-๙]+(?:\s+[ก-๙]+)?|[A-Za-z]+(?:\s+[A-Za-z]+)?', process_message)
+				# Filter out common Thai words
+				filter_words = ['หา', 'จาก', 'ไป', 'ที่', 'สั้น', 'ที่สุด', 'โดย', 'เลือก', 'ผ่าน', 'มาก', 'ระบุ', 'เต็ม', 'และ', 'ของ', 'แต่', 'ละ', 'คน', 'ใน']
+				potential_names = [name for name in potential_names if name not in filter_words and len(name) > 2]
+				
 				if len(potential_names) >= 2:
-					st.caption(f"🔗 Checking connection path between people...")
+					st.caption(f"🔗 Checking connection path between: {potential_names[0]} → {potential_names[1]}")
 					path_result = find_connection_path(potential_names[0], potential_names[1])
+					
 					if path_result.get('path_found'):
 						st.success(f"✅ Found connection in {path_result['hops']} hops!")
+						
+						# Add path information to context for LLM
+						path_nodes_info = []
+						for node in path_result['path_nodes']:
+							labels_str = ', '.join(node.get('labels', []))
+							path_nodes_info.append(f"- **{node['name']}** ({labels_str}) - Connections: {node['connections']}")
+						
+						path_context_addition = f"""
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+**🔗 CONNECTION PATH FOUND (Use this to answer!):**
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+**Query:** Find path from "{potential_names[0]}" to "{potential_names[1]}"
+
+**Path Length:** {path_result['hops']} hops (shortest path)
+
+**Total Intermediate Connections:** {path_result['total_connections']}
+
+**Full Path:** {' → '.join([n['name'] for n in path_result['path_nodes']])}
+
+**Node Details (with connection counts):**
+{chr(10).join(path_nodes_info)}
+
+**Relationship Types:** {' → '.join(path_result['path_relationships'])}
+
+**⚠️ IMPORTANT:** Use the EXACT format from RULE #1.1 to display this path!
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+"""
+						st.caption(f"📊 Path details added to context for LLM")
+					else:
+						st.caption(f"⚠️ No direct path found within {3} hops")
+						if path_result.get('error'):
+							st.warning(f"Error: {path_result['error']}")
 			
 			# Use cached vector search for better performance
 			if VECTOR_SEARCH_AVAILABLE and query_with_relationships is not None:
@@ -1427,6 +1467,10 @@ if process_message:
 						
 						# Build context from the node properties AND relationships
 						ctx = build_context(results)
+						
+						# Add path context if available
+						if path_context_addition:
+							ctx = ctx + path_context_addition
 						
 						if ctx.strip():
 							st.caption(f"✅ พบข้อมูล {len(results)} รายการพร้อมความสัมพันธ์ (Found {len(results)} nodes with relationships)")
