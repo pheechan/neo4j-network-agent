@@ -82,6 +82,20 @@ except Exception as e:
 	VECTOR_SEARCH_AVAILABLE = False
 	print(f"Direct vector search not available: {e}")
 
+# Import new self-healing and summarization modules
+try:
+	from Graph.Tool.CypherHealer import CypherHealer, extract_cypher_from_llm_response
+	from Graph.Tool.CypherSummarizer import CypherResultSummarizer, summarize_path_result, remove_large_properties
+	ENHANCED_FEATURES_AVAILABLE = True
+except Exception as e:
+	CypherHealer = None
+	CypherResultSummarizer = None
+	extract_cypher_from_llm_response = None
+	summarize_path_result = None
+	remove_large_properties = None
+	ENHANCED_FEATURES_AVAILABLE = False
+	print(f"Enhanced features not available: {e}")
+
 # Try to import HuggingFace embeddings for generating embeddings
 try:
 	from langchain_huggingface import HuggingFaceEmbeddings
@@ -257,54 +271,87 @@ def search_person_by_name_fallback(person_name: str) -> dict:
 		return None
 
 
-def find_connection_path(person_a: str, person_b: str, max_hops: int = 10) -> dict:
+def find_connection_path(person_a: str, person_b: str, max_hops: int = 10, use_healing: bool = True) -> dict:
 	"""
 	Find the shortest path between two people with the most connections.
 	Strategy: Among all shortest paths, pick the one where intermediate nodes have the most total connections.
 	Returns dict with: path_found, hops, path_nodes, path_relationships, total_connections
+	
+	NEW: Self-healing Cypher execution if query fails!
 	"""
+	query = f"""
+	MATCH (a:Person), (b:Person)
+	WHERE (a.name CONTAINS $person_a OR a.`ชื่อ` CONTAINS $person_a OR a.`ชื่อ-นามสกุล` CONTAINS $person_a)
+	  AND (b.name CONTAINS $person_b OR b.`ชื่อ` CONTAINS $person_b OR b.`ชื่อ-นามสกุล` CONTAINS $person_b)
+	WITH a, b
+	MATCH path = allShortestPaths((a)-[*..{max_hops}]-(b))
+	WITH path, 
+	     length(path) as hops,
+	     nodes(path) as all_nodes,
+	     relationships(path) as path_rels
+	// Calculate total connections for all nodes in path
+	UNWIND all_nodes as node
+	WITH path, hops, all_nodes, path_rels, node,
+	     size([(node)-[]-() | 1]) as node_connections
+	WITH path, hops, all_nodes, path_rels,
+	     sum(node_connections) as total_connections
+	// Return path with ALL node details (Person, Agency, Position, etc.)
+	RETURN path, hops,
+	       [node in all_nodes | {{
+	           name: coalesce(node.`ชื่อ-นามสกุล`, node.name, node.`ชื่อ`, 'Unknown'), 
+	           labels: labels(node),
+	           connections: size([(node)-[]-() | 1]),
+	           type: CASE 
+	               WHEN 'Person' IN labels(node) THEN 'person'
+	               WHEN 'Agency' IN labels(node) THEN 'agency'
+	               WHEN 'Position' IN labels(node) THEN 'position'
+	               WHEN 'Ministry' IN labels(node) THEN 'ministry'
+	               WHEN 'Connect_by' IN labels(node) THEN 'network'
+	               ELSE 'other'
+	           END
+	       }}] as path_nodes,
+	       [rel in path_rels | type(rel)] as path_rels,
+	       total_connections
+	ORDER BY hops ASC, total_connections DESC
+	LIMIT 1
+	"""
+	
 	try:
 		driver = get_driver()
-		with driver.session(database=NEO4J_DB) as session:
-			# Find ALL shortest paths through ANY node type
-			# This allows paths through Agency, Position, Ministry, Connect_by, etc.
-			query = f"""
-			MATCH (a:Person), (b:Person)
-			WHERE (a.name CONTAINS $person_a OR a.`ชื่อ` CONTAINS $person_a OR a.`ชื่อ-นามสกุล` CONTAINS $person_a)
-			  AND (b.name CONTAINS $person_b OR b.`ชื่อ` CONTAINS $person_b OR b.`ชื่อ-นามสกุล` CONTAINS $person_b)
-			WITH a, b
-			MATCH path = allShortestPaths((a)-[*..{max_hops}]-(b))
-			WITH path, 
-			     length(path) as hops,
-			     nodes(path) as all_nodes,
-			     relationships(path) as path_rels
-			// Calculate total connections for all nodes in path
-			UNWIND all_nodes as node
-			WITH path, hops, all_nodes, path_rels, node,
-			     size([(node)-[]-() | 1]) as node_connections
-			WITH path, hops, all_nodes, path_rels,
-			     sum(node_connections) as total_connections
-			// Return path with ALL node details (Person, Agency, Position, etc.)
-			RETURN path, hops,
-			       [node in all_nodes | {{
-			           name: coalesce(node.`ชื่อ-นามสกุล`, node.name, node.`ชื่อ`, 'Unknown'), 
-			           labels: labels(node),
-			           connections: size([(node)-[]-() | 1]),
-			           type: CASE 
-			               WHEN 'Person' IN labels(node) THEN 'person'
-			               WHEN 'Agency' IN labels(node) THEN 'agency'
-			               WHEN 'Position' IN labels(node) THEN 'position'
-			               WHEN 'Ministry' IN labels(node) THEN 'ministry'
-			               WHEN 'Connect_by' IN labels(node) THEN 'network'
-			               ELSE 'other'
-			           END
-			       }}] as path_nodes,
-			       [rel in path_rels | type(rel)] as path_rels,
-			       total_connections
-			ORDER BY hops ASC, total_connections DESC
-			LIMIT 1
-			"""
+		
+		# Use self-healing if available
+		if use_healing and ENHANCED_FEATURES_AVAILABLE and CypherHealer:
+			healer = CypherHealer(driver, lambda p: ask_openrouter_requests(p, model=OPENROUTER_MODEL, max_tokens=500))
+			result = healer.execute_with_healing(query, {'person_a': person_a, 'person_b': person_b}, database=NEO4J_DB)
 			
+			if result['success']:
+				if result['healed']:
+					st.info(f"✨ Query was automatically healed after {result['attempts']} attempts")
+				
+				data = result['data']
+				if data:
+					record = data[0]
+					return {
+						'path_found': True,
+						'hops': record['hops'],
+						'path_nodes': record['path_nodes'],
+						'path_relationships': record['path_rels'],
+						'total_connections': record['total_connections']
+					}
+				else:
+					return {
+						'path_found': False,
+						'hops': None,
+						'path_nodes': [],
+						'path_relationships': [],
+						'total_connections': 0
+					}
+			else:
+				st.error(f"Query failed: {result['error']}")
+				return {'path_found': False, 'error': result['error']}
+		
+		# Fallback to manual execution
+		with driver.session(database=NEO4J_DB) as session:
 			result = session.run(query, person_a=person_a, person_b=person_b)
 			record = result.single()
 			
@@ -312,7 +359,7 @@ def find_connection_path(person_a: str, person_b: str, max_hops: int = 10) -> di
 				return {
 					'path_found': True,
 					'hops': record['hops'],
-					'path_nodes': record['path_nodes'],  # ALL nodes (Person, Agency, Position, etc.)
+					'path_nodes': record['path_nodes'],
 					'path_relationships': record['path_rels'],
 					'total_connections': record['total_connections']
 				}
@@ -1218,6 +1265,14 @@ with st.sidebar:
 			help="Cache responses for faster repeat queries. Disable for always fresh answers."
 		)
 		st.session_state['use_cache'] = use_cache
+		
+		if ENHANCED_FEATURES_AVAILABLE:
+			use_concise_mode = st.checkbox(
+				"✨ Concise mode (NEW!)",
+				value=st.session_state.get('use_concise_mode', False),
+				help="Generate shorter, more focused answers (max 100 words Thai, 150 English). Powered by AI summarization."
+			)
+			st.session_state['use_concise_mode'] = use_concise_mode
 		
 		if st.button("🗑️ Clear all caches", use_container_width=True):
 			st.cache_data.clear()
@@ -2240,6 +2295,42 @@ Q: "อนุทิน ชาญวีรกูล ตำแหน่งอะ�
 			
 			# Fix bullet point formatting to ensure each bullet is on a new line
 			answer = fix_bullet_formatting(answer)
+			
+			# Apply concise summarization if enabled
+			use_concise_mode = st.session_state.get('use_concise_mode', False)
+			if use_concise_mode and ENHANCED_FEATURES_AVAILABLE and CypherResultSummarizer and results:
+				try:
+					st.caption("✨ Applying concise mode...")
+					summarizer = CypherResultSummarizer(lambda p: ask_openrouter_requests(p, model=OPENROUTER_MODEL, max_tokens=300))
+					
+					# If path result exists, use specialized path summarization
+					if path_context_addition and 'path_found' in str(path_context_addition) and '✅' in str(path_context_addition):
+						# Extract path data for specialized summarization
+						path_match = None
+						if 'path_result' in locals() and path_result and path_result.get('path_found'):
+							path_match = path_result
+							person_a = potential_names[0] if 'potential_names' in locals() and len(potential_names) >= 2 else None
+							person_b = potential_names[1] if 'potential_names' in locals() and len(potential_names) >= 2 else None
+							
+							if person_a and person_b:
+								concise_answer = summarize_path_result(
+									path_match, 
+									person_a, 
+									person_b,
+									lambda p: ask_openrouter_requests(p, model=OPENROUTER_MODEL, max_tokens=300)
+								)
+								answer = concise_answer
+								st.caption("✅ Used specialized path summarization")
+					
+					# Otherwise use general summarization
+					if 'concise_answer' not in locals():
+						# Prepare results for summarization (remove embeddings)
+						clean_results = [remove_large_properties(r) for r in results[:20]]  # Limit to 20 for context
+						concise_answer = summarizer.summarize(process_message, clean_results)
+						answer = concise_answer
+						st.caption("✅ Concise summary generated")
+				except Exception as e:
+					st.caption(f"⚠️ Summarization failed, using full answer: {str(e)[:100]}")
 			
 			# Track analytics
 			response_time = time.time() - start_time
