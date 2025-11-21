@@ -72,12 +72,13 @@ VECTOR_TOP_K = int(get_config("VECTOR_TOP_K", "5"))
 
 # Try to import direct vector search (bypasses LangChain's broken text extraction)
 try:
-	from KG.VectorSearchDirect import query_vector_search_direct, query_multiple_vector_indexes, query_with_relationships
+	from KG.VectorSearchDirect import query_vector_search_direct, query_multiple_vector_indexes, query_with_relationships, search_all_nodes_direct
 	VECTOR_SEARCH_AVAILABLE = True
 except Exception as e:
 	query_vector_search_direct = None
 	query_multiple_vector_indexes = None
 	query_with_relationships = None
+	search_all_nodes_direct = None
 	VECTOR_SEARCH_AVAILABLE = False
 	print(f"Direct vector search not available: {e}")
 
@@ -1534,9 +1535,9 @@ if process_message:
 - Say they connect through any organization/network
 
 **DO:**
-- State clearly no path was found
-- Suggest they may not be connected
-- Offer to search for alternative connections
+- State clearly: "ไม่พบเส้นทางเชื่อมต่อระหว่าง {potential_names[0]} และ {potential_names[1]} ในฐานข้อมูล"
+- Be brief and factual
+- Don't elaborate unless asked
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 """
 						st.caption(f"⚠️ Added NO PATH warning to context")
@@ -1624,6 +1625,21 @@ if process_message:
 							          for r in results):
 								results.append(fb_node)
 								st.caption(f"➕ Added '{fb_name}' from direct search to context")
+					
+					# If vector search returned too few results, add comprehensive fallback
+					if search_all_nodes_direct and len(results) < 20:
+						st.caption(f"🔍 Enhancing with comprehensive node search...")
+						try:
+							additional_results = search_all_nodes_direct(process_message, top_k=30)
+							if additional_results:
+								# Merge with existing results, avoiding duplicates
+								for node in additional_results:
+									node_id = node.get("id") or node.get("name")
+									if not any(r.get("id") == node_id or r.get("name") == node.get("name") for r in results):
+										results.append(node)
+								st.caption(f"  ✅ Added {len(additional_results)} more nodes from comprehensive search")
+						except Exception as e:
+							st.caption(f"  ⚠️ Comprehensive search error: {str(e)[:100]}")
 					
 					# results is List[dict] with __relationships__ included
 					if results and len(results) > 0:

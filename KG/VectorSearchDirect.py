@@ -273,6 +273,114 @@ def query_with_relationships(
     return all_results[:top_k_per_index * 2]
 
 
+def search_all_nodes_direct(question: str, top_k: int = 50) -> List[dict]:
+    """
+    Fallback search that gets ALL nodes from Neo4j by label search.
+    Used when vector search doesn't return enough results or for comprehensive search.
+    Searches across all node types: Person, Position, Agency, Ministry, Connect_by, etc.
+    
+    Args:
+        question: Search query (used for text matching in properties)
+        top_k: Maximum number of results to return
+        
+    Returns:
+        List of node dicts with properties and relationships
+    """
+    driver = GraphDatabase.driver(
+        os.getenv("NEO4J_URI"),
+        auth=(os.getenv("NEO4J_USERNAME"), os.getenv("NEO4J_PASSWORD"))
+    )
+    
+    all_results = []
+    
+    with driver.session(database=os.getenv("NEO4J_DB", "neo4j")) as session:
+        # Search all node types with text matching
+        query = """
+        // Search Person nodes
+        MATCH (n:Person)
+        WHERE n.name CONTAINS $search 
+           OR n.`ชื่อ` CONTAINS $search
+           OR n.`ชื่อ-นามสกุล` CONTAINS $search
+        OPTIONAL MATCH (n)-[r]->(connected)
+        WITH n, collect(DISTINCT {
+            type: type(r), 
+            node: properties(connected),
+            labels: labels(connected)
+        }) as relationships
+        RETURN properties(n) as props, labels(n) as labels, relationships
+        LIMIT $limit
+        
+        UNION
+        
+        // Search Position nodes
+        MATCH (n:Position)
+        WHERE n.name CONTAINS $search OR n.`ตำแหน่ง` CONTAINS $search
+        OPTIONAL MATCH (n)-[r]->(connected)
+        WITH n, collect(DISTINCT {
+            type: type(r),
+            node: properties(connected),
+            labels: labels(connected)
+        }) as relationships
+        RETURN properties(n) as props, labels(n) as labels, relationships
+        LIMIT $limit
+        
+        UNION
+        
+        // Search Agency nodes
+        MATCH (n:Agency)
+        WHERE n.name CONTAINS $search OR n.`หน่วยงาน` CONTAINS $search
+        OPTIONAL MATCH (n)-[r]->(connected)
+        WITH n, collect(DISTINCT {
+            type: type(r),
+            node: properties(connected),
+            labels: labels(connected)
+        }) as relationships
+        RETURN properties(n) as props, labels(n) as labels, relationships
+        LIMIT $limit
+        
+        UNION
+        
+        // Search Connect_by nodes
+        MATCH (n:Connect_by)
+        WHERE n.name CONTAINS $search OR n.`Connect by` CONTAINS $search
+        OPTIONAL MATCH (n)-[r]->(connected)
+        WITH n, collect(DISTINCT {
+            type: type(r),
+            node: properties(connected),
+            labels: labels(connected)
+        }) as relationships
+        RETURN properties(n) as props, labels(n) as labels, relationships
+        LIMIT $limit
+        """
+        
+        # Extract search terms from question
+        search_terms = [question]
+        # Try to extract Thai names or key terms
+        import re
+        thai_words = re.findall(r'[ก-๙]+', question)
+        if thai_words:
+            search_terms.extend(thai_words[:5])  # Add up to 5 Thai words
+        
+        for search_term in search_terms:
+            if len(search_term) < 2:
+                continue
+                
+            result = session.run(query, search=search_term, limit=top_k // len(search_terms))
+            
+            for record in result:
+                node_dict = dict(record["props"])
+                node_dict["__labels__"] = record["labels"]
+                node_dict["__relationships__"] = record.get("relationships", [])
+                
+                # Avoid duplicates
+                node_id = node_dict.get("id") or node_dict.get("name")
+                if not any(r.get("id") == node_id or r.get("name") == node_id for r in all_results):
+                    all_results.append(node_dict)
+    
+    driver.close()
+    return all_results[:top_k]
+
+
 if __name__ == "__main__":
     # Test the function
     print("Testing direct vector search (single index)...")
