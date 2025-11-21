@@ -271,6 +271,131 @@ def search_person_by_name_fallback(person_name: str) -> dict:
 		return None
 
 
+def find_stelligence_to_person_path(target_person: str, max_hops: int = 10) -> dict:
+	"""
+	Find path from Stelligence network to a target person.
+	Strategy: Find any Person in Stelligence network, then path to target.
+	"""
+	query = f"""
+	// Find Stelligence network members
+	MATCH (stelligence:Connect_by {{ชื่อ: 'Stelligence'}})
+	MATCH (start:Person)-[:Connect_by]->(stelligence)
+	
+	// Find target person
+	MATCH (target:Person)
+	WHERE target.name CONTAINS $target_person 
+	   OR target.`ชื่อ` CONTAINS $target_person 
+	   OR target.`ชื่อ-นามสกุล` CONTAINS $target_person
+	
+	// Find shortest path
+	WITH start, target
+	MATCH path = shortestPath((start)-[*..{max_hops}]-(target))
+	WITH path, start, target,
+	     length(path) as hops,
+	     nodes(path) as all_nodes,
+	     relationships(path) as path_rels
+	
+	// Calculate total connections
+	UNWIND all_nodes as node
+	WITH path, hops, start, target, all_nodes, path_rels, node,
+	     size([(node)-[]-() | 1]) as node_connections
+	WITH path, hops, start, target, all_nodes, path_rels,
+	     sum(node_connections) as total_connections
+	
+	// Return path details
+	RETURN path, hops,
+	       start.`ชื่อ-นามสกุล` as stelligence_member,
+	       [node in all_nodes | {{
+	           name: coalesce(node.`ชื่อ-นามสกุล`, node.name, node.`ชื่อ`, 'Unknown'), 
+	           labels: labels(node),
+	           connections: size([(node)-[]-() | 1]),
+	           type: CASE 
+	               WHEN 'Person' IN labels(node) THEN 'person'
+	               WHEN 'Agency' IN labels(node) THEN 'agency'
+	               WHEN 'Position' IN labels(node) THEN 'position'
+	               WHEN 'Ministry' IN labels(node) THEN 'ministry'
+	               WHEN 'Connect_by' IN labels(node) THEN 'network'
+	               ELSE 'other'
+	           END
+	       }}] as path_nodes,
+	       [rel in path_rels | type(rel)] as path_rels,
+	       total_connections
+	ORDER BY hops ASC, total_connections DESC
+	LIMIT 1
+	"""
+	
+	try:
+		driver = get_driver()
+		with driver.session(database=NEO4J_DB) as session:
+			result = session.run(query, target_person=target_person)
+			record = result.single()
+			
+			if record:
+				return {
+					'path_found': True,
+					'from_network': True,
+					'stelligence_member': record['stelligence_member'],
+					'hops': record['hops'],
+					'path_nodes': record['path_nodes'],
+					'path_relationships': record['path_rels'],
+					'total_connections': record['total_connections']
+				}
+			else:
+				return {'path_found': False, 'from_network': True}
+	except Exception as e:
+		return {'path_found': False, 'from_network': True, 'error': str(e)}
+
+
+def get_person_basic_info(person_name: str) -> dict:
+	"""
+	Get basic information about a person when no path exists.
+	Returns their positions, connections, and agencies.
+	"""
+	query = """
+	MATCH (p:Person)
+	WHERE p.name CONTAINS $person_name 
+	   OR p.`ชื่อ` CONTAINS $person_name 
+	   OR p.`ชื่อ-นามสกุล` CONTAINS $person_name
+	
+	OPTIONAL MATCH (p)-[:ดำรงตำแหน่ง]->(pos:Position)
+	OPTIONAL MATCH (pos)-[:สังกัด]->(agency:Agency)
+	OPTIONAL MATCH (agency)-[:สังกัด]->(ministry:Ministry)
+	
+	WITH p, 
+	     collect(DISTINCT pos.ตำแหน่ง) as positions,
+	     collect(DISTINCT agency.`ชื่อหน่วยงาน`) as agencies,
+	     collect(DISTINCT ministry.`ชื่อกระทรวง`) as ministries,
+	     size([(p)-[]-() | 1]) as total_connections
+	
+	RETURN p.`ชื่อ-นามสกุล` as name,
+	       positions,
+	       agencies,
+	       ministries,
+	       total_connections
+	LIMIT 1
+	"""
+	
+	try:
+		driver = get_driver()
+		with driver.session(database=NEO4J_DB) as session:
+			result = session.run(query, person_name=person_name)
+			record = result.single()
+			
+			if record:
+				return {
+					'found': True,
+					'name': record['name'],
+					'positions': [p for p in record['positions'] if p],
+					'agencies': [a for a in record['agencies'] if a],
+					'ministries': [m for m in record['ministries'] if m],
+					'total_connections': record['total_connections']
+				}
+			else:
+				return {'found': False}
+	except Exception as e:
+		return {'found': False, 'error': str(e)}
+
+
 def find_connection_path(person_a: str, person_b: str, max_hops: int = 10, use_healing: bool = True) -> dict:
 	"""
 	Find the shortest path between two people with the most connections.
@@ -278,7 +403,26 @@ def find_connection_path(person_a: str, person_b: str, max_hops: int = 10, use_h
 	Returns dict with: path_found, hops, path_nodes, path_relationships, total_connections
 	
 	NEW: Self-healing Cypher execution if query fails!
+	NEW: Smart handling for Stelligence/Santisook queries!
 	"""
+	
+	# Special case: Check if source is Stelligence/Santisook (network, not person)
+	if person_a.lower() in ['stelligence', 'santisook', 'สเต็ลลิเจนซ์', 'สันติสุข']:
+		st.info("🔍 กำลังค้นหาเส้นทางจากเครือข่าย Stelligence ไปยังบุคคลเป้าหมาย...")
+		result = find_stelligence_to_person_path(person_b, max_hops)
+		
+		if result.get('path_found'):
+			return result
+		else:
+			# If no path from Stelligence, just show target person info
+			st.warning("⚠️ ไม่พบเส้นทางจากเครือข่าย Stelligence โดยตรง")
+			st.info("💡 แสดงข้อมูลพื้นฐานของบุคคลเป้าหมายแทน...")
+			target_info = get_person_basic_info(person_b)
+			return {
+				'path_found': False,
+				'show_target_info': True,
+				'target_info': target_info
+			}
 	query = f"""
 	MATCH (a:Person), (b:Person)
 	WHERE (a.name CONTAINS $person_a OR a.`ชื่อ` CONTAINS $person_a OR a.`ชื่อ-นามสกุล` CONTAINS $person_a)
@@ -364,12 +508,19 @@ def find_connection_path(person_a: str, person_b: str, max_hops: int = 10, use_h
 					'total_connections': record['total_connections']
 				}
 			else:
+				# No path found - get info about target person instead
+				st.warning("⚠️ ไม่พบเส้นทางเชื่อมต่อโดยตรง")
+				st.info("💡 แสดงข้อมูลพื้นฐานของบุคคลเป้าหมายแทน...")
+				target_info = get_person_basic_info(person_b)
+				
 				return {
 					'path_found': False,
 					'hops': None,
 					'path_nodes': [],
 					'path_relationships': [],
-					'total_connections': 0
+					'total_connections': 0,
+					'show_target_info': True,
+					'target_info': target_info
 				}
 	except Exception as e:
 		st.error(f"Error finding connection path: {e}")
@@ -1678,8 +1829,69 @@ if process_message:
 						if path_result.get('error'):
 							st.warning(f"Error: {path_result['error']}")
 						
-						# Add explicit NO PATH instruction to context
-						path_context_addition = f"""
+						# Check if we should show target person info instead
+						if path_result.get('show_target_info') and path_result.get('target_info', {}).get('found'):
+							target_info = path_result['target_info']
+							
+							# Build target person info context
+							target_details = []
+							target_details.append(f"**ชื่อ:** {target_info['name']}")
+							
+							if target_info.get('positions'):
+								target_details.append(f"**ตำแหน่ง:** {', '.join(target_info['positions'])}")
+							
+							if target_info.get('agencies'):
+								target_details.append(f"**หน่วยงาน:** {', '.join(target_info['agencies'])}")
+							
+							if target_info.get('ministries'):
+								target_details.append(f"**กระทรวง:** {', '.join(target_info['ministries'])}")
+							
+							target_details.append(f"**จำนวน Connections:** {target_info['total_connections']}")
+							
+							# Special handling for Stelligence queries
+							if path_result.get('from_network'):
+								stelligence_note = """
+
+**💡 วิธีการติดต่อ:**
+เนื่องจากไม่พบเส้นทางโดยตรงจากเครือข่าย Stelligence คุณอาจพิจารณา:
+1. ติดต่อผ่านหน่วยงานหรือกระทรวงที่บุคคลนี้สังกัด
+2. หาคนกลางที่มีความสัมพันธ์กับทั้ง Stelligence และบุคคลเป้าหมาย
+3. เข้าถึงผ่านเครือข่ายวิชาชีพหรือกิจกรรมร่วม
+"""
+							else:
+								stelligence_note = """
+
+**💡 คำแนะนำ:**
+เนื่องจากไม่พบเส้นทางเชื่อมต่อโดยตรง คุณอาจต้อง:
+1. หาคนกลางที่รู้จักทั้งสองฝ่าย
+2. ติดต่อผ่านหน่วยงานหรือองค์กรที่เกี่ยวข้อง
+3. เข้าร่วมงานหรือกิจกรรมที่บุคคลเป้าหมายมีส่วนร่วม
+"""
+							
+							path_context_addition = f"""
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+**ℹ️ ไม่พบเส้นทางเชื่อมต่อโดยตรง - แสดงข้อมูลบุคคลเป้าหมาย:**
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+**Query:** Find path from "{potential_names[0]}" to "{potential_names[1]}"
+
+**Result:** ❌ NO DIRECT PATH FOUND
+
+**ข้อมูลบุคคลเป้าหมาย:**
+{chr(10).join(target_details)}
+{stelligence_note}
+
+**⚠️ IMPORTANT INSTRUCTIONS:**
+- State clearly: "ไม่พบเส้นทางเชื่อมต่อโดยตรงระหว่าง {potential_names[0]} และ {potential_names[1]} ในระบบ"
+- Then show the target person's information above
+- Suggest ways to potentially reach them based on their position/agency
+- DO NOT create fake connection paths!
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+"""
+						else:
+							# No path and no target info available
+							path_context_addition = f"""
 
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 **❌ NO CONNECTION PATH FOUND:**
