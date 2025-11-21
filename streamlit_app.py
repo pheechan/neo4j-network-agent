@@ -1900,11 +1900,24 @@ if process_message:
 {chr(10).join(target_details)}
 {stelligence_note}
 
-**⚠️ IMPORTANT INSTRUCTIONS:**
-- State clearly: "ไม่พบเส้นทางเชื่อมต่อโดยตรงระหว่าง {potential_names[0]} และ {potential_names[1]} ในระบบ"
-- Then show the target person's information above
-- Suggest ways to potentially reach them based on their position/agency
-- DO NOT create fake connection paths!
+**⚠️ CRITICAL - DO NOT CREATE FAKE PATHS:**
+- There is NO direct connection path between these two people
+- DO NOT say things like "เส้นทาง: A → B → C" because this path DOES NOT EXIST
+- DO NOT mention "ระยะทาง: X ขั้น" because there is NO path
+- DO NOT list intermediate people or organizations as if they form a path
+
+**WHAT TO SAY:**
+1. Start with: "ไม่พบเส้นทางเชื่อมต่อโดยตรงระหว่าง {potential_names[0]} และ {potential_names[1]} ในฐานข้อมูล"
+2. Then show ONLY the target person's information:
+{chr(10).join(target_details)}
+{stelligence_note}
+3. Suggest general strategies to reach them (through their ministry/agency/position)
+
+**FORBIDDEN:**
+- ❌ Do NOT create paths like "A → Agency → B"
+- ❌ Do NOT say "เส้นทางที่สั้นที่สุด"
+- ❌ Do NOT calculate "ระยะทาง"
+- ❌ Do NOT list intermediate nodes
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 """
 						else:
