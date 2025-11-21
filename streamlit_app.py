@@ -190,6 +190,72 @@ def detect_query_intent(query: str) -> dict:
 	return intent_info
 
 
+def search_person_by_name_fallback(person_name: str) -> dict:
+	"""
+	Fallback search when vector search doesn't find a person.
+	Searches directly by name in Neo4j without using vector embeddings.
+	Returns node dict with properties and relationships.
+	"""
+	try:
+		driver = get_driver()
+		with driver.session() as session:
+			# Search across all possible name properties
+			result = session.run('''
+				MATCH (p:Person)
+				WHERE p.name CONTAINS $name 
+				   OR p.`ชื่อ` CONTAINS $name
+				   OR p.`ชื่อ-นามสกุล` CONTAINS $name
+				
+				// Get connected positions, agencies, etc.
+				OPTIONAL MATCH (p)-[r1:WORKS_AS]->(pos:Position)
+				OPTIONAL MATCH (p)-[r2:WORKS_AT]->(agency:Agency)
+				OPTIONAL MATCH (p)-[r3:CONNECTS_TO]->(cb:Connect_by)
+				
+				WITH p, 
+					 collect(DISTINCT pos.name) as positions,
+					 collect(DISTINCT agency.name) as agencies,
+					 collect(DISTINCT cb.name) as connections,
+					 size([(p)-[]-() | 1]) as total_connections
+				
+				RETURN p.name as name,
+					   p.`ชื่อ` as thai_name,
+					   p.`ชื่อ-นามสกุล` as full_name,
+					   positions,
+					   agencies,
+					   connections,
+					   total_connections,
+					   properties(p) as all_properties
+				LIMIT 1
+			''', name=person_name)
+			
+			record = result.single()
+			if record:
+				# Build node dict similar to vector search format
+				node = dict(record['all_properties'])
+				node['__labels__'] = ['Person']
+				node['positions'] = record['positions']
+				node['agencies'] = record['agencies']
+				node['connections'] = record['connections']
+				node['total_connections'] = record['total_connections']
+				
+				# Build embedding_text for display
+				display_name = record['full_name'] or record['thai_name'] or record['name']
+				positions_str = ', '.join(record['positions']) if record['positions'] else ''
+				agencies_str = ', '.join(record['agencies']) if record['agencies'] else ''
+				
+				node['embedding_text'] = f"{display_name}"
+				if positions_str:
+					node['embedding_text'] += f" - {positions_str}"
+				if agencies_str:
+					node['embedding_text'] += f" ({agencies_str})"
+				
+				return node
+			return None
+	except Exception as e:
+		st.error(f"Fallback search error: {e}")
+		return None
+
+
 def find_connection_path(person_a: str, person_b: str, max_hops: int = 10) -> dict:
 	"""
 	Find the shortest path between two people with the most connections.
@@ -1356,6 +1422,15 @@ if process_message:
 				
 				if len(potential_names) >= 2:
 					st.caption(f"🔗 Checking connection path between: {potential_names[0]} → {potential_names[1]}")
+					
+					# FALLBACK: Search for these people directly if vector search might miss them
+					fallback_nodes = []
+					for pname in potential_names[:2]:
+						fallback_node = search_person_by_name_fallback(pname)
+						if fallback_node:
+							fallback_nodes.append(fallback_node)
+							st.caption(f"✅ Found '{pname}' via direct search")
+					
 					path_result = find_connection_path(potential_names[0], potential_names[1])
 					
 					if path_result.get('path_found'):
@@ -1468,6 +1543,16 @@ if process_message:
 								st.caption(f"  ✅ Added {added_count} {stell_name} network members")
 						except Exception as e:
 							st.warning(f"  ⚠️ Stelligence query error: {str(e)[:100]}")
+					
+					# Add fallback nodes to results if path query found them
+					if intent['is_relationship_query'] and 'fallback_nodes' in locals() and fallback_nodes:
+						for fb_node in fallback_nodes:
+							# Check if not already in results
+							fb_name = fb_node.get('ชื่อ-นามสกุล') or fb_node.get('name') or fb_node.get('ชื่อ')
+							if not any(r.get('ชื่อ-นามสกุล') == fb_name or r.get('name') == fb_name 
+							          for r in results):
+								results.append(fb_node)
+								st.caption(f"➕ Added '{fb_name}' from direct search to context")
 					
 					# results is List[dict] with __relationships__ included
 					if results and len(results) > 0:
