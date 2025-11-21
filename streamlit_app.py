@@ -190,7 +190,7 @@ def detect_query_intent(query: str) -> dict:
 	return intent_info
 
 
-def find_connection_path(person_a: str, person_b: str, max_hops: int = 3) -> dict:
+def find_connection_path(person_a: str, person_b: str, max_hops: int = 5) -> dict:
 	"""
 	Find the shortest path between two people with the most connections.
 	Strategy: Among all shortest paths, pick the one where intermediate nodes have the most total connections.
@@ -1391,7 +1391,7 @@ if process_message:
 """
 						st.caption(f"📊 Path details added to context for LLM")
 					else:
-						st.caption(f"⚠️ No direct path found within {3} hops")
+						st.caption(f"⚠️ No direct path found within 5 hops")
 						if path_result.get('error'):
 							st.warning(f"Error: {path_result['error']}")
 			
