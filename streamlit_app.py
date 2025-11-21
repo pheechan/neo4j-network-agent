@@ -206,19 +206,22 @@ def find_connection_path(person_a: str, person_b: str, max_hops: int = 3) -> dic
 			  AND b.name CONTAINS $person_b OR b.`ชื่อ` CONTAINS $person_b
 			WITH a, b
 			MATCH path = allShortestPaths((a)-[*..{max_hops}]-(b))
-			WITH path, length(path) as hops,
+			WITH path, 
+			     length(path) as hops,
 			     nodes(path) as path_nodes,
 			     relationships(path) as path_rels
-			// Calculate total connections of intermediate nodes (excluding start and end)
+			// Calculate connection count for each node
+			UNWIND path_nodes as node
+			WITH path, hops, path_nodes, path_rels, node,
+			     size([(node)-[]-() | 1]) as node_connections
 			WITH path, hops, path_nodes, path_rels,
-			     [node in path_nodes[1..-1] | COUNT { (node)-[]-() }] as intermediate_connections
-			WITH path, hops, path_nodes, path_rels,
-			     reduce(total = 0, conn in intermediate_connections | total + conn) as total_connections
+			     sum(node_connections) as total_connections
+			// Return path with node details
 			RETURN path, hops,
 			       [node in path_nodes | {{
 			           name: coalesce(node.name, node.`ชื่อ`, 'Unknown'), 
 			           labels: labels(node),
-			           connections: COUNT { (node)-[]-() }
+			           connections: size([(node)-[]-() | 1])
 			       }}] as path_nodes,
 			       [rel in path_rels | type(rel)] as path_rels,
 			       total_connections
@@ -1565,13 +1568,34 @@ Total intermediate connections: 22
 - Person3 and Person4 are more well-connected (22 total vs 8 total)
 - Higher chance of successful introduction
 
-**When displaying path:**
-Show each person's connection count to highlight why this path is optimal:
-"เส้นทางที่แนะนำ (3 ขั้น, 22 connections รวม):
-1. Boss
-2. Person3 (มี 10 connections) ← Well connected!
-3. Person4 (มี 12 connections) ← Very well connected!
-4. พี่โด่ง"
+**When displaying path - USE THIS EXACT FORMAT:**
+
+**🎯 เส้นทางที่แนะนำ:**
+
+**ระยะทาง:** 3 ขั้น (shortest path)
+**Connections รวมของคนกลาง:** 22 connections
+
+**เส้นทาง:**
+1. **Boss** (ต้นทาง)
+   
+2. **Person3** (คนกลาง)
+   - Connections: 10 🌟
+   - ตำแหน่ง: [position if available]
+   
+3. **Person4** (คนกลาง) 
+   - Connections: 12 🌟🌟 ← Most connected!
+   - ตำแหน่ง: [position if available]
+   
+4. **พี่โด่ง** (เป้าหมาย)
+
+**สรุป:** เส้นทางนี้ผ่านคนที่มี connections สูง ทำให้มีโอกาสติดต่อสำเร็จสูง
+
+❌ DON'T show messy format like:
+"อนุทิน ชาญวีรกูล
+พี่เต๊ะ (มี 2 connections: อธิบดี, Santisook)
+พี่โด่ง"
+
+✅ DO use clear numbered list with proper sections and spacing
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 
 ⚠️ **CRITICAL RULE #2 - Always Include Full Ministry Name in Positions!**
