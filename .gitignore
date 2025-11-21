@@ -1,18 +1,62 @@
+# ============================================
+# SENSITIVE FILES - NEVER COMMIT THESE!
+# ============================================
+
 # Environment variables (contain secrets!)
 .env
 .env.*
 *.env
+.envrc
+
+# Streamlit secrets
+.streamlit/secrets.toml
+secrets.toml
+*secrets*.toml
+
+# Configuration files that may contain credentials
+config.ini
+config.yaml
+config.yml
+*.config
+credentials.json
+auth.json
+
+# API Keys and tokens
+*apikey*
+*api_key*
+*api-key*
+*token*
+*.pem
+*.key
+*.cert
+
+# ============================================
+# PROJECT-SPECIFIC
+# ============================================
 
 # Analytics and logs
 query_analytics.jsonl
 *.log
+*.log.*
 
-# Python
+# Database dumps
+*.sql
+*.db
+*.sqlite
+*.sqlite3
+
+# ============================================
+# PYTHON
+# ============================================
+
+# Byte-compiled / optimized / DLL files
 __pycache__/
 *.py[cod]
 *$py.class
 *.so
 .Python
+
+# Distribution / packaging
 build/
 develop-eggs/
 dist/
@@ -25,26 +69,144 @@ parts/
 sdist/
 var/
 wheels/
+pip-wheel-metadata/
+share/python-wheels/
 *.egg-info/
 .installed.cfg
 *.egg
+MANIFEST
+
+# PyInstaller
+*.manifest
+*.spec
+
+# Installer logs
+pip-log.txt
+pip-delete-this-directory.txt
+
+# Unit test / coverage reports
+htmlcov/
+.tox/
+.nox/
+.coverage
+.coverage.*
+.cache
+nosetests.xml
+coverage.xml
+*.cover
+*.py,cover
+.hypothesis/
+.pytest_cache/
+
+# Jupyter Notebook
+.ipynb_checkpoints
+*-checkpoint.ipynb
+
+# IPython
+profile_default/
+ipython_config.py
+
+# pyenv
+.python-version
 
 # Virtual environments
 venv/
 .venv/
 ENV/
 env/
+env.bak/
+venv.bak/
 
-# IDE
+# ============================================
+# DOCUMENTATION & NOTES (Optional cleanup)
+# ============================================
+
+# Personal notes and drafts
+*_DRAFT.md
+*_TODO.md
+*_NOTES.md
+NOTES.md
+TODO.md
+
+# Documentation that may contain sensitive info
+KNOWLEDGE_TRANSFER*.md
+KNOWLEDGE_TRANSFER*.docx
+DEPLOYMENT_NOTES.md
+SECRETS_*.md
+
+# Temporary Word documents
+~$*.doc*
+~$*.xls*
+~$*.ppt*
+*.tmp
+
+# ============================================
+# IDE & EDITORS
+# ============================================
+
+# VSCode
 .vscode/
+*.code-workspace
+
+# PyCharm
 .idea/
+*.iml
+*.iws
+
+# Sublime Text
+*.sublime-project
+*.sublime-workspace
+
+# Vim
 *.swp
 *.swo
 *~
+.*.sw?
 
-# OS
+# Emacs
+*~
+\#*\#
+.\#*
+
+# ============================================
+# OPERATING SYSTEM
+# ============================================
+
+# macOS
 .DS_Store
-Thumbs.db
+.AppleDouble
+.LSOverride
+._*
 
-# Streamlit
-.streamlit/secrets.toml
+# Windows
+Thumbs.db
+Thumbs.db:encryptable
+ehthumbs.db
+ehthumbs_vista.db
+*.stackdump
+[Dd]esktop.ini
+$RECYCLE.BIN/
+*.lnk
+
+# Linux
+.directory
+.Trash-*
+
+# ============================================
+# BACKUP & ARCHIVE
+# ============================================
+
+# Backup files
+*.bak
+*.backup
+*.old
+*.orig
+*_backup/
+backup/
+
+# Archives (unless needed for project)
+*.zip
+*.tar
+*.tar.gz
+*.rar
+*.7z
