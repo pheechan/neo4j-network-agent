@@ -211,14 +211,14 @@ def find_connection_path(person_a: str, person_b: str, max_hops: int = 3) -> dic
 			     relationships(path) as path_rels
 			// Calculate total connections of intermediate nodes (excluding start and end)
 			WITH path, hops, path_nodes, path_rels,
-			     [node in path_nodes[1..-1] | size((node)-[]-())] as intermediate_connections
+			     [node in path_nodes[1..-1] | COUNT { (node)-[]-() }] as intermediate_connections
 			WITH path, hops, path_nodes, path_rels,
 			     reduce(total = 0, conn in intermediate_connections | total + conn) as total_connections
 			RETURN path, hops,
 			       [node in path_nodes | {{
 			           name: coalesce(node.name, node.`ชื่อ`, 'Unknown'), 
 			           labels: labels(node),
-			           connections: size((node)-[]-())
+			           connections: COUNT { (node)-[]-() }
 			       }}] as path_nodes,
 			       [rel in path_rels | type(rel)] as path_rels,
 			       total_connections
