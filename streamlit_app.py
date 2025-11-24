@@ -61,7 +61,7 @@ NEO4J_DB = get_config("NEO4J_DATABASE", "neo4j")
 # LLM Configuration - Support both Google Gemini and OpenRouter
 # Using system instructions and context prefixes to help Gemini handle Thai content without safety blocks
 LLM_PROVIDER = get_config("LLM_PROVIDER", "gemini")  # "gemini" or "openrouter"
-GOOGLE_API_KEY = get_config("GOOGLE_API_KEY", "AIzaSyCzu6Pl8OsglZxJc9LR_rSVUalFtCwRa4w")
+GOOGLE_API_KEY = get_config("GOOGLE_API_KEY")  # Set in Streamlit secrets or .env
 GEMINI_MODEL = get_config("GEMINI_MODEL", "gemini-2.5-flash")  # Latest stable Gemini 2.5 Flash
 
 # OpenRouter (fallback)
