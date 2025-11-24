@@ -1088,13 +1088,26 @@ def ask_openrouter_streaming(prompt: str, model: str = OPENROUTER_MODEL, max_tok
 def ask_gemini(prompt: str, model: str = GEMINI_MODEL, max_tokens: int = 512, system_prompt: str = None) -> str:
 	"""
 	Call Google Gemini API for text generation.
+	Automatically falls back to OpenRouter if safety filters block the response.
 	"""
 	if not GOOGLE_API_KEY:
 		return "Google API key not set (GOOGLE_API_KEY)"
 	
 	try:
 		genai.configure(api_key=GOOGLE_API_KEY)
-		model_instance = genai.GenerativeModel(model)
+		
+		# Use safety settings to be more permissive
+		safety_settings = {
+			"HARASSMENT": "BLOCK_NONE",
+			"HATE_SPEECH": "BLOCK_NONE",
+			"SEXUALLY_EXPLICIT": "BLOCK_NONE",
+			"DANGEROUS_CONTENT": "BLOCK_NONE",
+		}
+		
+		model_instance = genai.GenerativeModel(
+			model,
+			safety_settings=safety_settings
+		)
 		
 		# Combine system prompt and user prompt
 		full_prompt = prompt
@@ -1108,14 +1121,31 @@ def ask_gemini(prompt: str, model: str = GEMINI_MODEL, max_tokens: int = 512, sy
 				max_output_tokens=max_tokens,
 			)
 		)
+		
+		# Check if response was blocked by safety filters
+		if not response.parts:
+			# Safety filter blocked - fallback to OpenRouter
+			if OPENROUTER_API_KEY:
+				print(f"⚠️ Gemini safety filter triggered (finish_reason: {response.candidates[0].finish_reason}), falling back to OpenRouter")
+				return ask_openrouter_requests(prompt, max_tokens=max_tokens, system_prompt=system_prompt)
+			else:
+				return f"⚠️ Gemini's safety filter blocked this response (finish_reason: {response.candidates[0].finish_reason}). Please rephrase your query or configure OpenRouter as fallback."
+		
 		return response.text.strip()
 	except Exception as e:
+		error_msg = str(e)
+		# If it's a safety/blocked content error, try fallback
+		if "finish_reason" in error_msg or "safety" in error_msg.lower():
+			if OPENROUTER_API_KEY:
+				print(f"⚠️ Gemini safety issue: {e}, falling back to OpenRouter")
+				return ask_openrouter_requests(prompt, max_tokens=max_tokens, system_prompt=system_prompt)
 		return f"Gemini request failed: {type(e).__name__} {e}"
 
 
 def ask_gemini_streaming(prompt: str, model: str = GEMINI_MODEL, max_tokens: int = 512, system_prompt: str = None):
 	"""
 	Stream responses from Google Gemini API.
+	Automatically falls back to OpenRouter if safety filters block the response.
 	"""
 	if not GOOGLE_API_KEY:
 		yield "Google API key not set"
@@ -1123,7 +1153,19 @@ def ask_gemini_streaming(prompt: str, model: str = GEMINI_MODEL, max_tokens: int
 	
 	try:
 		genai.configure(api_key=GOOGLE_API_KEY)
-		model_instance = genai.GenerativeModel(model)
+		
+		# Use safety settings to be more permissive
+		safety_settings = {
+			"HARASSMENT": "BLOCK_NONE",
+			"HATE_SPEECH": "BLOCK_NONE",
+			"SEXUALLY_EXPLICIT": "BLOCK_NONE",
+			"DANGEROUS_CONTENT": "BLOCK_NONE",
+		}
+		
+		model_instance = genai.GenerativeModel(
+			model,
+			safety_settings=safety_settings
+		)
 		
 		# Combine system prompt and user prompt
 		full_prompt = prompt
@@ -1139,11 +1181,26 @@ def ask_gemini_streaming(prompt: str, model: str = GEMINI_MODEL, max_tokens: int
 			stream=True
 		)
 		
+		has_content = False
 		for chunk in response:
 			if chunk.text:
+				has_content = True
 				yield chunk.text
+		
+		# If no content was yielded, might be safety blocked - fallback
+		if not has_content and OPENROUTER_API_KEY:
+			yield "\n\n⚠️ Gemini safety filter triggered, switching to OpenRouter...\n\n"
+			for chunk in ask_openrouter_streaming(prompt, max_tokens=max_tokens, system_prompt=system_prompt):
+				yield chunk
+				
 	except Exception as e:
-		yield f"\n\n[Error: {type(e).__name__} {e}]"
+		error_msg = str(e)
+		if ("finish_reason" in error_msg or "safety" in error_msg.lower()) and OPENROUTER_API_KEY:
+			yield "\n\n⚠️ Gemini safety issue detected, switching to OpenRouter...\n\n"
+			for chunk in ask_openrouter_streaming(prompt, max_tokens=max_tokens, system_prompt=system_prompt):
+				yield chunk
+		else:
+			yield f"\n\n[Error: {type(e).__name__} {e}]"
 
 
 # ============================================================================
