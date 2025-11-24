@@ -10,3 +10,6 @@ python-dotenv>=1.0.0
 # HuggingFace embeddings (free alternative to OpenAI)
 langchain-huggingface>=0.1.0
 sentence-transformers>=2.2.0
+
+# Google Gemini
+google-generativeai>=0.3.0

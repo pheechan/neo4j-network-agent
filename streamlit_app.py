@@ -22,6 +22,7 @@ import streamlit as st
 import time
 import json
 from functools import wraps
+import google.generativeai as genai
 
 try:
 	from neo4j import GraphDatabase
@@ -57,6 +58,12 @@ NEO4J_USER = get_config("NEO4J_USERNAME", "neo4j")
 NEO4J_PWD = get_config("NEO4J_PASSWORD", "")
 NEO4J_DB = get_config("NEO4J_DATABASE", "neo4j")
 
+# LLM Configuration - Support both Google Gemini and OpenRouter
+LLM_PROVIDER = get_config("LLM_PROVIDER", "gemini")  # "gemini" or "openrouter"
+GOOGLE_API_KEY = get_config("GOOGLE_API_KEY", "AIzaSyCzu6Pl8OsglZxJc9LR_rSVUalFtCwRa4w")
+GEMINI_MODEL = get_config("GEMINI_MODEL", "gemini-1.5-flash")
+
+# OpenRouter (fallback)
 OPENROUTER_API_KEY = get_config("OPENROUTER_API_KEY") or get_config("OPENAI_API_KEY")
 OPENROUTER_API_BASE = get_config("OPENROUTER_BASE_URL", get_config("OPENROUTER_API_BASE", get_config("OPENAI_API_BASE", "https://openrouter.ai/api/v1")))
 OPENROUTER_MODEL = get_config("OPENROUTER_MODEL", "deepseek/deepseek-chat")
@@ -146,9 +153,8 @@ def cached_llm_response(prompt: str, context: str, model: str, max_tokens: int =
 	_cache_bypass: Use different value to force cache miss (e.g., timestamp)
 	"""
 	full_prompt = f"{context}\n\n{prompt}" if context else prompt
-	return ask_openrouter_requests(
+	return ask_llm(
 		prompt=full_prompt,
-		model=model,
 		max_tokens=max_tokens,
 		system_prompt=system_prompt
 	)
@@ -472,7 +478,7 @@ def find_connection_path(person_a: str, person_b: str, max_hops: int = 10, use_h
 		
 		# Use self-healing if available
 		if use_healing and ENHANCED_FEATURES_AVAILABLE and CypherHealer:
-			healer = CypherHealer(driver, lambda p: ask_openrouter_requests(p, model=OPENROUTER_MODEL, max_tokens=500))
+			healer = CypherHealer(driver, lambda p: ask_llm(p, max_tokens=500))
 			result = healer.execute_with_healing(query, {'person_a': person_a, 'person_b': person_b}, database=NEO4J_DB)
 			
 			if result['success']:
@@ -571,9 +577,8 @@ Format: Return ONLY the questions, one per line, each starting with "•"
 Do not include explanations or numbering."""
 
 	try:
-		response = ask_openrouter_requests(
+		response = ask_llm(
 			prompt=prompt,
-			model=OPENROUTER_MODEL,
 			max_tokens=200,
 			system_prompt="You are a helpful assistant generating follow-up questions in Thai."
 		)
@@ -1074,6 +1079,91 @@ def ask_openrouter_streaming(prompt: str, model: str = OPENROUTER_MODEL, max_tok
 						continue
 	except Exception as e:
 		yield f"\n\n[Error: {type(e).__name__} {e}]"
+
+
+# ============================================================================
+# Google Gemini Functions
+# ============================================================================
+
+def ask_gemini(prompt: str, model: str = GEMINI_MODEL, max_tokens: int = 512, system_prompt: str = None) -> str:
+	"""
+	Call Google Gemini API for text generation.
+	"""
+	if not GOOGLE_API_KEY:
+		return "Google API key not set (GOOGLE_API_KEY)"
+	
+	try:
+		genai.configure(api_key=GOOGLE_API_KEY)
+		model_instance = genai.GenerativeModel(model)
+		
+		# Combine system prompt and user prompt
+		full_prompt = prompt
+		if system_prompt:
+			full_prompt = f"{system_prompt}\n\n{prompt}"
+		
+		response = model_instance.generate_content(
+			full_prompt,
+			generation_config=genai.types.GenerationConfig(
+				temperature=0.2,
+				max_output_tokens=max_tokens,
+			)
+		)
+		return response.text.strip()
+	except Exception as e:
+		return f"Gemini request failed: {type(e).__name__} {e}"
+
+
+def ask_gemini_streaming(prompt: str, model: str = GEMINI_MODEL, max_tokens: int = 512, system_prompt: str = None):
+	"""
+	Stream responses from Google Gemini API.
+	"""
+	if not GOOGLE_API_KEY:
+		yield "Google API key not set"
+		return
+	
+	try:
+		genai.configure(api_key=GOOGLE_API_KEY)
+		model_instance = genai.GenerativeModel(model)
+		
+		# Combine system prompt and user prompt
+		full_prompt = prompt
+		if system_prompt:
+			full_prompt = f"{system_prompt}\n\n{prompt}"
+		
+		response = model_instance.generate_content(
+			full_prompt,
+			generation_config=genai.types.GenerationConfig(
+				temperature=0.2,
+				max_output_tokens=max_tokens,
+			),
+			stream=True
+		)
+		
+		for chunk in response:
+			if chunk.text:
+				yield chunk.text
+	except Exception as e:
+		yield f"\n\n[Error: {type(e).__name__} {e}]"
+
+
+# ============================================================================
+# Unified LLM Interface - Automatically chooses provider
+# ============================================================================
+
+def ask_llm(prompt: str, max_tokens: int = 512, system_prompt: str = None) -> str:
+	"""Unified interface that uses the configured LLM provider."""
+	if LLM_PROVIDER == "gemini":
+		return ask_gemini(prompt, max_tokens=max_tokens, system_prompt=system_prompt)
+	else:
+		return ask_openrouter_requests(prompt, max_tokens=max_tokens, system_prompt=system_prompt)
+
+
+def ask_llm_streaming(prompt: str, max_tokens: int = 512, system_prompt: str = None):
+	"""Unified streaming interface that uses the configured LLM provider."""
+	if LLM_PROVIDER == "gemini":
+		yield from ask_gemini_streaming(prompt, max_tokens=max_tokens, system_prompt=system_prompt)
+	else:
+		yield from ask_openrouter_streaming(prompt, max_tokens=max_tokens, system_prompt=system_prompt)
 
 
 def fix_bullet_formatting(text: str) -> str:
@@ -1618,7 +1708,8 @@ with st.sidebar:
 	
 	# Settings at bottom
 	with st.expander("Settings"):
-		st.caption(f"Model: {OPENROUTER_MODEL}")
+		model_display = f"Gemini ({GEMINI_MODEL})" if LLM_PROVIDER == "gemini" else f"OpenRouter ({OPENROUTER_MODEL})"
+		st.caption(f"Model: {model_display}")
 		st.caption(f"Database: {NEO4J_DB}")
 
 
@@ -2621,7 +2712,7 @@ Q: "อนุทิน ชาญวีรกูล ตำแหน่งอะ�
 				# Streaming response (like ChatGPT) - always bypasses cache
 				answer_placeholder = st.empty()
 				answer = ""
-				for chunk in ask_openrouter_streaming(user_message, max_tokens=2048, system_prompt=system_prompt):
+				for chunk in ask_llm_streaming(user_message, max_tokens=2048, system_prompt=system_prompt):
 					answer += chunk
 					answer_placeholder.markdown(answer + "▌")  # Show cursor
 				answer_placeholder.markdown(answer)  # Remove cursor
@@ -2630,7 +2721,7 @@ Q: "อนุทิน ชาญวีรกูล ตำแหน่งอะ�
 				if bypass_cache:
 					# Direct call without cache
 					st.caption("🔄 Generating fresh response...")
-					answer = ask_openrouter_requests(user_message, max_tokens=2048, system_prompt=system_prompt)
+					answer = ask_llm(user_message, max_tokens=2048, system_prompt=system_prompt)
 				else:
 					# Try to use cached response first
 					try:
@@ -2645,7 +2736,7 @@ Q: "อนุทิน ชาญวีรกูล ตำแหน่งอะ�
 					except Exception as e:
 						# If cached fails, try direct call (has retry logic)
 						st.warning(f"Cache miss, calling API directly...")
-						answer = ask_openrouter_requests(user_message, max_tokens=2048, system_prompt=system_prompt)
+						answer = ask_llm(user_message, max_tokens=2048, system_prompt=system_prompt)
 			
 			# Fix bullet point formatting to ensure each bullet is on a new line
 			answer = fix_bullet_formatting(answer)
@@ -2669,7 +2760,7 @@ Q: "อนุทิน ชาญวีรกูล ตำแหน่งอะ�
 								path_result, 
 								person_a, 
 								person_b,
-								lambda p: ask_openrouter_requests(p, model=OPENROUTER_MODEL, max_tokens=300)
+								lambda p: ask_llm(p, max_tokens=300)
 							)
 							answer = concise_answer
 							st.caption("✅ Used specialized path summarization")
@@ -2685,9 +2776,8 @@ Full Answer:
 
 Generate a concise summary that preserves key facts and names. Answer in the same language as the question."""
 						
-						concise_answer = ask_openrouter_requests(
+						concise_answer = ask_llm(
 							summary_prompt, 
-							model=OPENROUTER_MODEL, 
 							max_tokens=300
 						)
 						answer = concise_answer
