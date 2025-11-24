@@ -1096,12 +1096,14 @@ def ask_gemini(prompt: str, model: str = GEMINI_MODEL, max_tokens: int = 512, sy
 	try:
 		genai.configure(api_key=GOOGLE_API_KEY)
 		
-		# Use safety settings to be more permissive
+		# Use safety settings to be more permissive - correct Gemini API format
+		from google.generativeai.types import HarmCategory, HarmBlockThreshold
+		
 		safety_settings = {
-			"HARASSMENT": "BLOCK_NONE",
-			"HATE_SPEECH": "BLOCK_NONE",
-			"SEXUALLY_EXPLICIT": "BLOCK_NONE",
-			"DANGEROUS_CONTENT": "BLOCK_NONE",
+			HarmCategory.HARM_CATEGORY_HARASSMENT: HarmBlockThreshold.BLOCK_NONE,
+			HarmCategory.HARM_CATEGORY_HATE_SPEECH: HarmBlockThreshold.BLOCK_NONE,
+			HarmCategory.HARM_CATEGORY_SEXUALLY_EXPLICIT: HarmBlockThreshold.BLOCK_NONE,
+			HarmCategory.HARM_CATEGORY_DANGEROUS_CONTENT: HarmBlockThreshold.BLOCK_NONE,
 		}
 		
 		model_instance = genai.GenerativeModel(
@@ -1123,7 +1125,7 @@ def ask_gemini(prompt: str, model: str = GEMINI_MODEL, max_tokens: int = 512, sy
 		)
 		
 		# Check if response was blocked by safety filters
-		if not response.parts:
+		if not response.parts or not response.text:
 			# Safety filter blocked - fallback to OpenRouter
 			if OPENROUTER_API_KEY:
 				print(f"⚠️ Gemini safety filter triggered (finish_reason: {response.candidates[0].finish_reason}), falling back to OpenRouter")
@@ -1132,6 +1134,16 @@ def ask_gemini(prompt: str, model: str = GEMINI_MODEL, max_tokens: int = 512, sy
 				return f"⚠️ Gemini's safety filter blocked this response (finish_reason: {response.candidates[0].finish_reason}). Please rephrase your query or configure OpenRouter as fallback."
 		
 		return response.text.strip()
+	except ValueError as e:
+		# Specifically handle the "response.text requires valid Part" error
+		error_msg = str(e)
+		if "finish_reason" in error_msg or "valid Part" in error_msg:
+			if OPENROUTER_API_KEY:
+				print(f"⚠️ Gemini safety filter blocked content, falling back to OpenRouter")
+				return ask_openrouter_requests(prompt, max_tokens=max_tokens, system_prompt=system_prompt)
+			else:
+				return f"⚠️ Gemini's safety filter blocked this response. Please rephrase your query or configure OpenRouter as fallback."
+		return f"Gemini request failed: ValueError {e}"
 	except Exception as e:
 		error_msg = str(e)
 		# If it's a safety/blocked content error, try fallback
@@ -1154,12 +1166,14 @@ def ask_gemini_streaming(prompt: str, model: str = GEMINI_MODEL, max_tokens: int
 	try:
 		genai.configure(api_key=GOOGLE_API_KEY)
 		
-		# Use safety settings to be more permissive
+		# Use safety settings to be more permissive - correct Gemini API format
+		from google.generativeai.types import HarmCategory, HarmBlockThreshold
+		
 		safety_settings = {
-			"HARASSMENT": "BLOCK_NONE",
-			"HATE_SPEECH": "BLOCK_NONE",
-			"SEXUALLY_EXPLICIT": "BLOCK_NONE",
-			"DANGEROUS_CONTENT": "BLOCK_NONE",
+			HarmCategory.HARM_CATEGORY_HARASSMENT: HarmBlockThreshold.BLOCK_NONE,
+			HarmCategory.HARM_CATEGORY_HATE_SPEECH: HarmBlockThreshold.BLOCK_NONE,
+			HarmCategory.HARM_CATEGORY_SEXUALLY_EXPLICIT: HarmBlockThreshold.BLOCK_NONE,
+			HarmCategory.HARM_CATEGORY_DANGEROUS_CONTENT: HarmBlockThreshold.BLOCK_NONE,
 		}
 		
 		model_instance = genai.GenerativeModel(
@@ -1182,10 +1196,15 @@ def ask_gemini_streaming(prompt: str, model: str = GEMINI_MODEL, max_tokens: int
 		)
 		
 		has_content = False
-		for chunk in response:
-			if chunk.text:
-				has_content = True
-				yield chunk.text
+		try:
+			for chunk in response:
+				if chunk.text:
+					has_content = True
+					yield chunk.text
+		except ValueError as ve:
+			# Handle streaming ValueError (safety block during stream)
+			if "valid Part" in str(ve) or "finish_reason" in str(ve):
+				has_content = False
 		
 		# If no content was yielded, might be safety blocked - fallback
 		if not has_content and OPENROUTER_API_KEY:
@@ -1193,6 +1212,14 @@ def ask_gemini_streaming(prompt: str, model: str = GEMINI_MODEL, max_tokens: int
 			for chunk in ask_openrouter_streaming(prompt, max_tokens=max_tokens, system_prompt=system_prompt):
 				yield chunk
 				
+	except ValueError as e:
+		error_msg = str(e)
+		if ("finish_reason" in error_msg or "valid Part" in error_msg) and OPENROUTER_API_KEY:
+			yield "\n\n⚠️ Gemini safety filter blocked content, switching to OpenRouter...\n\n"
+			for chunk in ask_openrouter_streaming(prompt, max_tokens=max_tokens, system_prompt=system_prompt):
+				yield chunk
+		else:
+			yield f"\n\n[Error: ValueError {e}]"
 	except Exception as e:
 		error_msg = str(e)
 		if ("finish_reason" in error_msg or "safety" in error_msg.lower()) and OPENROUTER_API_KEY:
