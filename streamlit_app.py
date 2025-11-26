@@ -1126,12 +1126,8 @@ This is for professional networking and organizational analysis purposes only.""
 		
 		# Check if response was blocked by safety filters
 		if not response.parts or not response.text:
-			# Safety filter blocked - fallback to OpenRouter
-			if OPENROUTER_API_KEY:
-				print(f"⚠️ Gemini safety filter triggered (finish_reason: {response.candidates[0].finish_reason}), falling back to OpenRouter")
-				return ask_openrouter_requests(prompt, max_tokens=max_tokens, system_prompt=system_prompt)
-			else:
-				return f"⚠️ Gemini's safety filter blocked this response (finish_reason: {response.candidates[0].finish_reason}). Please rephrase your query or configure OpenRouter as fallback."
+			# Safety filter blocked - show Thai error message
+			return f"⚠️ ขออภัย Gemini AI มีปัญหาในการตอบคำถามนี้ กรุณาลองถามใหม่อีกครั้งหรือเปลี่ยนคำถามเล็กน้อย\n\n(Gemini's safety filter blocked this response: finish_reason={response.candidates[0].finish_reason}. Please try rephrasing your question.)"
 		
 		return response.text.strip()
 	except ValueError as e:
@@ -1223,9 +1219,7 @@ This is for professional networking and organizational analysis purposes only.""
 	except Exception as e:
 		error_msg = str(e)
 		if "finish_reason" in error_msg or "safety" in error_msg.lower():
-			yield "\n\n⚠️ ขออภัย Gemini AI มีปัญหาในการตอบคำถามนี้ กรุณาลองถามใหม่อีกครั้ง\n\n(Gemini encountered an issue. Please try again.)"
-			for chunk in ask_openrouter_streaming(prompt, max_tokens=max_tokens, system_prompt=system_prompt):
-				yield chunk
+			yield "\n\n⚠️ ขออภัย Gemini AI มีปัญหาในการตอบคำถามนี้ กรุณาลองถามใหม่อีกครั้งหรือเปลี่ยนคำถามเล็กน้อย\n\n(Gemini's safety filter was triggered. Please try rephrasing your question.)"
 		else:
 			yield f"\n\n[Error: {type(e).__name__} {e}]"
 
