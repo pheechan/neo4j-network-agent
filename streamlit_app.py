@@ -1138,19 +1138,13 @@ This is for professional networking and organizational analysis purposes only.""
 		# Specifically handle the "response.text requires valid Part" error
 		error_msg = str(e)
 		if "finish_reason" in error_msg or "valid Part" in error_msg:
-			if OPENROUTER_API_KEY:
-				print(f"⚠️ Gemini safety filter blocked content, falling back to OpenRouter")
-				return ask_openrouter_requests(prompt, max_tokens=max_tokens, system_prompt=system_prompt)
-			else:
-				return f"⚠️ Gemini's safety filter blocked this response. Please rephrase your query or configure OpenRouter as fallback."
+			return "⚠️ ขออภัย Gemini AI มีปัญหาในการตอบคำถามนี้ กรุณาลองถามใหม่อีกครั้งหรือเปลี่ยนคำถามเล็กน้อย\n\n(Gemini's safety filter was triggered. Please try rephrasing your question.)"
 		return f"Gemini request failed: ValueError {e}"
 	except Exception as e:
 		error_msg = str(e)
-		# If it's a safety/blocked content error, try fallback
+		# If it's a safety/blocked content error, show user-friendly message
 		if "finish_reason" in error_msg or "safety" in error_msg.lower():
-			if OPENROUTER_API_KEY:
-				print(f"⚠️ Gemini safety issue: {e}, falling back to OpenRouter")
-				return ask_openrouter_requests(prompt, max_tokens=max_tokens, system_prompt=system_prompt)
+			return "⚠️ ขออภัย Gemini AI มีปัญหาในการตอบคำถามนี้ กรุณาลองถามใหม่อีกครั้ง\n\n(Gemini encountered an issue. Please try again.)"
 		return f"Gemini request failed: {type(e).__name__} {e}"
 
 
@@ -1216,24 +1210,20 @@ This is for professional networking and organizational analysis purposes only.""
 			if "valid Part" in str(ve) or "finish_reason" in str(ve):
 				has_content = False
 		
-		# If no content was yielded, might be safety blocked - fallback
-		if not has_content and OPENROUTER_API_KEY:
-			yield "\n\n⚠️ Gemini safety filter triggered, switching to OpenRouter...\n\n"
-			for chunk in ask_openrouter_streaming(prompt, max_tokens=max_tokens, system_prompt=system_prompt):
-				yield chunk
+		# If no content was yielded, show user-friendly error
+		if not has_content:
+			yield "\n\n⚠️ ขออภัย Gemini AI มีปัญหาในการตอบคำถามนี้ กรุณาลองถามใหม่อีกครั้งหรือเปลี่ยนคำถามเล็กน้อย\n\n(Gemini's safety filter was triggered. Please try rephrasing your question.)"
 				
 	except ValueError as e:
 		error_msg = str(e)
-		if ("finish_reason" in error_msg or "valid Part" in error_msg) and OPENROUTER_API_KEY:
-			yield "\n\n⚠️ Gemini safety filter blocked content, switching to OpenRouter...\n\n"
-			for chunk in ask_openrouter_streaming(prompt, max_tokens=max_tokens, system_prompt=system_prompt):
-				yield chunk
+		if "finish_reason" in error_msg or "valid Part" in error_msg:
+			yield "\n\n⚠️ ขออภัย Gemini AI มีปัญหาในการตอบคำถามนี้ กรุณาลองถามใหม่อีกครั้ง\n\n(Gemini encountered an issue. Please try again.)"
 		else:
 			yield f"\n\n[Error: ValueError {e}]"
 	except Exception as e:
 		error_msg = str(e)
-		if ("finish_reason" in error_msg or "safety" in error_msg.lower()) and OPENROUTER_API_KEY:
-			yield "\n\n⚠️ Gemini safety issue detected, switching to OpenRouter...\n\n"
+		if "finish_reason" in error_msg or "safety" in error_msg.lower():
+			yield "\n\n⚠️ ขออภัย Gemini AI มีปัญหาในการตอบคำถามนี้ กรุณาลองถามใหม่อีกครั้ง\n\n(Gemini encountered an issue. Please try again.)"
 			for chunk in ask_openrouter_streaming(prompt, max_tokens=max_tokens, system_prompt=system_prompt):
 				yield chunk
 		else:
