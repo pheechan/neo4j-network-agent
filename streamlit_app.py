@@ -1130,7 +1130,7 @@ This is for professional networking and organizational analysis purposes only.""
 		response = model_instance.generate_content(
 			full_prompt,
 			generation_config=genai.types.GenerationConfig(
-				temperature=0.2,
+				temperature=0.4,
 				max_output_tokens=max_tokens,
 			)
 		)
@@ -1210,7 +1210,7 @@ This is for professional networking and organizational analysis purposes only.""
 		response = model_instance.generate_content(
 			full_prompt,
 			generation_config=genai.types.GenerationConfig(
-				temperature=0.2,
+				temperature=0.4,
 				max_output_tokens=max_tokens,
 			),
 			stream=True
@@ -2801,7 +2801,126 @@ Q: "อนุทิน ชาญวีรกูล ตำแหน่งอะ�
 4. ✅ Always show "Connect by" networks (e.g., OSK115) - this is KEY for networking
 5. ✅ If ministry not in Context → say "ไม่มีข้อมูลกระทรวงในระบบ"
 6. ❌ DO NOT add explanations or responsibilities not in Context
-7. ❌ DO NOT guess or assume any information"""
+7. ❌ DO NOT guess or assume any information
+
+═══════════════════════════════════════════════════════════════
+🎨 VISUAL DESIGN REQUIREMENTS:
+═══════════════════════════════════════════════════════════════
+
+**ALWAYS use visual elements to make output engaging:**
+
+✅ **For Path/Network Visualizations:**
+```
+┌─────────────────────────────────────────┐
+│  เส้นทางที่แนะนำ                        │
+└─────────────────────────────────────────┘
+
+  [คนที่ 1] 
+      ↓
+      ↓ (ระยะทาง: 15 connections)
+      ↓
+  [คนที่ 2]
+      ↓
+      ↓ (ระยะทาง: 23 connections)
+      ↓
+  [คนที่ 3]
+
+Or use:  →  ⇒  ⟶  ➜  ➡️  for connections
+```
+
+✅ **For Person Cards:**
+```
+╔═══════════════════════════════════════╗
+║  👤 ชื่อ: [ชื่อเต็ม]                  ║
+╠═══════════════════════════════════════╣
+║  💼 ตำแหน่ง: [ตำแหน่ง]               ║
+║  🏢 หน่วยงาน: [หน่วยงาน]             ║
+║  🏛️ กระทรวง: [กระทรวง]               ║
+║  🔗 Connections: [จำนวน]              ║
+╚═══════════════════════════════════════╝
+```
+
+✅ **For Network Diagrams:**
+```
+        ┌─────────┐
+        │  Boss   │
+        └────┬────┘
+             │
+      ┌──────┼──────┐
+      │      │      │
+   ┌──▼──┐ ┌─▼──┐ ┌▼───┐
+   │ พี่เต│ │พี่โ│ │พี่เ│
+   │  ะ   │ │ด่ง │ │อ้น │
+   └─────┘ └────┘ └────┘
+```
+
+✅ **For Hierarchies:**
+```
+รัฐมนตรีว่าการ
+  ├─ รัฐมนตรีช่วยว่าการ คนที่ 1
+  ├─ รัฐมนตรีช่วยว่าการ คนที่ 2
+  └─ รัฐมนตรีช่วยว่าการ คนที่ 3
+```
+
+✅ **For Lists with Boxes:**
+```
+┏━━━━━━━━━━━━━━━━━━━━━━━━━━━┓
+┃  📋 รายชื่อบุคคล           ┃
+┣━━━━━━━━━━━━━━━━━━━━━━━━━━━┫
+┃  1️⃣ คนที่ 1 - ตำแหน่ง      ┃
+┃  2️⃣ คนที่ 2 - ตำแหน่ง      ┃
+┃  3️⃣ คนที่ 3 - ตำแหน่ง      ┃
+┗━━━━━━━━━━━━━━━━━━━━━━━━━━━┛
+```
+
+✅ **For Connections/Paths:**
+```
+(A) ═══════> (B) ═══════> (C)
+    15 cons      23 cons
+    
+Or:
+
+[A] ─┬─→ [B] ─┬─→ [C]
+     │        │
+     └─→ [D]  └─→ [E]
+```
+
+✅ **Section Separators:**
+```
+────────────────────────────────────────
+▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+═══════════════════════════════════════
+```
+
+✅ **Progress/Steps:**
+```
+① ────────────────────────────────────
+   คนที่ 1 (ต้นทาง)
+   
+② ────────────────────────────────────
+   คนที่ 2 (คนกลาง - 15 connections)
+   
+③ ────────────────────────────────────
+   คนที่ 3 (เป้าหมาย)
+```
+
+✅ **Stats/Metrics:**
+```
+📊 สถิติ:
+┌─────────────────────────┐
+│ ระยะทาง:    2 ขั้น     │
+│ Connections: 38 รวม    │
+│ เวลา:       < 1 วินาที │
+└─────────────────────────┘
+```
+
+**IMPORTANT:**
+- Use these visual elements in EVERY response
+- Make paths look like diagrams with arrows and boxes
+- Add emojis for visual interest (👤 💼 🏢 🔗 📊 ⭐)
+- Use different box styles for different types of info
+- Make the output look like a professional infographic"""
 			
 			# Use streaming for better UX (optional - can be toggled)
 			use_streaming = st.session_state.get('use_streaming', False)
