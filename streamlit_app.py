@@ -1,123 +1,13 @@
 """
-STelligence Network Agent - Neo4j Knowledge Graph Q&A System
-Version: 2.0.0 - Major improvements
-Last Updated: 2025-11-07
+ARCHIVED: Original Streamlit application (moved to archive/streamlit_app.py).
 
-Changelog v2.0.0:
-- ✅ Added retry logic with exponential backoff (handles 429 rate limits)
-- ✅ Added caching for vector search and LLM responses (1-hour TTL)
-- ✅ Added query intent detection (person/org/relationship/timeline)
-- ✅ Added multi-hop path finding for relationship queries
-- ✅ Added follow-up question generation
-- ✅ Added streaming response support (toggle in settings)
-- ✅ Added query analytics tracking (success rate, response time)
-- ✅ Improved error handling and user feedback
+This lightweight placeholder remains to indicate the UI was archived during
+the migration to FastAPI + React. The full original source is in
+`archive/streamlit_app.py` or can be retrieved from git history.
 """
 
-import os
-import time
-import json
-from datetime import datetime
-from typing import List, Dict
-from functools import wraps
-
-import streamlit as st
-import requests
-import google.generativeai as genai
-from dotenv import load_dotenv
-
-try:
-	from neo4j import GraphDatabase
-except Exception:
-	GraphDatabase = None
-
-load_dotenv()
-
-# Read from Streamlit secrets (cloud) or environment variables (local)
-def get_config(key, default=""):
-	"""Get config from st.secrets (Streamlit Cloud) or os.getenv (local)"""
-	try:
-		return st.secrets.get(key, os.getenv(key, default))
-	except:
-		return os.getenv(key, default)
-
-# Configuration (from .env or Streamlit secrets)
-NEO4J_URI = get_config("NEO4J_URI", "bolt://localhost:7687")
-NEO4J_USER = get_config("NEO4J_USERNAME", "neo4j")
-NEO4J_PWD = get_config("NEO4J_PASSWORD", "")
-NEO4J_DB = get_config("NEO4J_DATABASE", "neo4j")
-
-# LLM Configuration - Support both Google Gemini and OpenRouter
-# Using system instructions and context prefixes to help Gemini handle Thai content without safety blocks
-LLM_PROVIDER = get_config("LLM_PROVIDER", "gemini")  # "gemini" or "openrouter"
-GOOGLE_API_KEY = get_config("GOOGLE_API_KEY")  # Set in Streamlit secrets or .env
-GEMINI_MODEL = get_config("GEMINI_MODEL", "gemini-2.5-flash")  # Latest stable Gemini 2.5 Flash
-
-# OpenRouter (fallback)
-OPENROUTER_API_KEY = get_config("OPENROUTER_API_KEY") or get_config("OPENAI_API_KEY")
-OPENROUTER_API_BASE = get_config("OPENROUTER_BASE_URL", get_config("OPENROUTER_API_BASE", get_config("OPENAI_API_BASE", "https://openrouter.ai/api/v1")))
-OPENROUTER_MODEL = get_config("OPENROUTER_MODEL", "deepseek/deepseek-chat")
-
-# Vector search configuration
-# Use person_vector_index as default since Person is likely the most queried label
-VECTOR_INDEX_NAME = get_config("VECTOR_INDEX_NAME", "person_vector_index")
-VECTOR_NODE_LABEL = get_config("VECTOR_NODE_LABEL", "Person")
-# Use embedding_text which contains the formatted text used to generate embeddings
-VECTOR_SOURCE_PROPERTY = get_config("VECTOR_SOURCE_PROPERTY", "embedding_text")
-VECTOR_EMBEDDING_PROPERTY = get_config("VECTOR_EMBEDDING_PROPERTY", "embedding")
-VECTOR_TOP_K = int(get_config("VECTOR_TOP_K", "5"))
-
-# Try to import direct vector search (bypasses LangChain's broken text extraction)
-try:
-	from KG.VectorSearchDirect import query_vector_search_direct, query_multiple_vector_indexes, query_with_relationships, search_all_nodes_direct
-	VECTOR_SEARCH_AVAILABLE = True
-except Exception as e:
-	query_vector_search_direct = None
-	query_multiple_vector_indexes = None
-	query_with_relationships = None
-	search_all_nodes_direct = None
-	VECTOR_SEARCH_AVAILABLE = False
-	print(f"Direct vector search not available: {e}")
-
-# Import new self-healing and summarization modules
-try:
-	from Graph.Tool.CypherHealer import CypherHealer, extract_cypher_from_llm_response
-	from Graph.Tool.CypherSummarizer import CypherResultSummarizer, summarize_path_result, remove_large_properties
-	ENHANCED_FEATURES_AVAILABLE = True
-except Exception as e:
-	CypherHealer = None
-	CypherResultSummarizer = None
-	extract_cypher_from_llm_response = None
-	summarize_path_result = None
-	remove_large_properties = None
-	ENHANCED_FEATURES_AVAILABLE = False
-	print(f"Enhanced features not available: {e}")
-
-# Try to import HuggingFace embeddings for generating embeddings
-try:
-	from langchain_huggingface import HuggingFaceEmbeddings
-	EMBEDDINGS_AVAILABLE = True
-except Exception as e:
-	HuggingFaceEmbeddings = None
-	EMBEDDINGS_AVAILABLE = False
-	print(f"HuggingFace embeddings not available: {e}")
-
-
-def get_driver():
-	if GraphDatabase is None:
-		raise RuntimeError("neo4j driver missing. Install with: python -m pip install neo4j")
-	return GraphDatabase.driver(NEO4J_URI, auth=(NEO4J_USER, NEO4J_PWD))
-
-
-@st.cache_resource
-def get_embeddings_model():
-	"""Load HuggingFace embeddings model (cached)"""
-	if not EMBEDDINGS_AVAILABLE:
-		return None
-	return HuggingFaceEmbeddings(
-		model_name="sentence-transformers/paraphrase-multilingual-MiniLM-L12-v2"
-	)
-
+def archived_notice():
+	return "This Streamlit UI was archived. See archive/streamlit_app.py or git history."
 
 @st.cache_data(ttl=3600)  # Cache for 1 hour
 def cached_vector_search(query: str, top_k_per_index: int = 30, _cache_bypass: bool = False):
@@ -166,35 +56,35 @@ def detect_query_intent(query: str) -> dict:
 	}
 	
 	# Person-focused queries
-	person_keywords = ['ใคร', 'who', 'คน', 'บุคคล', 'ชื่อ', 'name', 'นาม']
+	person_keywords = ['ใคร', 'who', 'คน', 'บุคคล', 'ชื่อ', 'name', 'นาม', 'surname', 'full name', 'นามสกุล', 'ชื่อ-นามสกุล', 'อนุทิน', 'ประยุทธ์', 'ประวิตร', 'บิ๊กตู่', 'บิ๊กป้อม']
 	if any(word in query_lower for word in person_keywords):
 		intent_info['intent_type'] = 'person'
 		intent_info['search_strategy'] = 'person_focused'
 	
 	# Ministry/Organization queries
-	org_keywords = ['กระทรวง', 'ministry', 'องค์กร', 'organization', 'หน่วยงาน', 'agency', 'department']
+	org_keywords = ['กระทรวง', 'ministry', 'องค์กร', 'organization', 'หน่วยงาน', 'agency', 'department', 'กรม', 'bureau', 'division']
 	if any(word in query_lower for word in org_keywords):
 		intent_info['intent_type'] = 'organization'
 		intent_info['search_strategy'] = 'org_focused'
 	
 	# Relationship/Connection queries
-	relationship_keywords = ['รู้จัก', 'connect', 'ผ่าน', 'through', 'เชื่อมโยง', 'relation', 'เส้นสาย', 'network']
+	relationship_keywords = ['รู้จัก', 'connect', 'ผ่าน', 'through', 'เชื่อมโยง', 'relation', 'เส้นสาย', 'network', 'relationship', 'path', 'link', 'สัมพันธ์', 'connection', 'รู้จักกัน', 'คนรู้จัก']
 	if any(word in query_lower for word in relationship_keywords):
 		intent_info['is_relationship_query'] = True
 		intent_info['search_strategy'] = 'relationship_focused'
 	
 	# Position/Role queries
-	position_keywords = ['ตำแหน่ง', 'position', 'role', 'หน้าที่', 'duty', 'job']
+	position_keywords = ['ตำแหน่ง', 'position', 'role', 'หน้าที่', 'duty', 'job', 'work as', 'ทำงานเป็น']
 	if any(word in query_lower for word in position_keywords):
 		intent_info['intent_type'] = 'position'
 	
 	# Comparison queries
-	comparison_keywords = ['เปรียบเทียบ', 'compare', 'แตกต่าง', 'difference', 'เหมือน', 'similar']
+	comparison_keywords = ['เปรียบเทียบ', 'compare', 'แตกต่าง', 'difference', 'เหมือน', 'similar', 'like', 'vs', 'versus']
 	if any(word in query_lower for word in comparison_keywords):
 		intent_info['is_comparison_query'] = True
 	
 	# Timeline queries
-	timeline_keywords = ['เมื่อไหร่', 'when', 'วันที่', 'date', 'ปี', 'year', 'ช่วงเวลา', 'period']
+	timeline_keywords = ['เมื่อไหร่', 'when', 'วันที่', 'date', 'ปี', 'year', 'ช่วงเวลา', 'period', 'timeline', 'history', 'ประวัติ']
 	if any(word in query_lower for word in timeline_keywords):
 		intent_info['intent_type'] = 'timeline'
 	

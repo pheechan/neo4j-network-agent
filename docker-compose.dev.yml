@@ -1,0 +1,56 @@
+# Docker Compose for neo4j-network-agent development
+
+services:
+  backend:
+    build:
+      context: .
+      dockerfile: backend/Dockerfile
+    ports:
+      - "8000:8000"
+    environment:
+      - LOCAL_LLM=${LOCAL_LLM:-ollama}
+      - LOCAL_LLM_MODEL=${LOCAL_LLM_MODEL:-scb10x/typhoon2.1-gemma3-4b}
+      - OLLAMA_URL=http://ollama:11434
+      - LLM_PROVIDER=${LLM_PROVIDER:-gemini}
+      - GOOGLE_API_KEY=${GOOGLE_API_KEY:-}
+      - GEMINI_MODEL=${GEMINI_MODEL:-gemini-2.5-flash}
+      - NEO4J_URI=${NEO4J_URI}
+      - NEO4J_USERNAME=${NEO4J_USERNAME}
+      - NEO4J_PASSWORD=${NEO4J_PASSWORD}
+      - NEO4J_DATABASE=${NEO4J_DATABASE:-neo4j}
+    depends_on:
+      - neo4j
+      - ollama
+
+  frontend:
+    build:
+      context: .
+      dockerfile: frontend/Dockerfile
+    ports:
+      - "5173:5173"
+    environment:
+      - VITE_API_URL=http://localhost:8000
+
+  neo4j:
+    image: neo4j:5.6
+    ports:
+      - "7474:7474"
+      - "7687:7687"
+    environment:
+      - NEO4J_AUTH=${NEO4J_AUTH:-neo4j/neo4j}
+    volumes:
+      - neo4j_data:/data
+
+  ollama:
+    image: ollama/ollama:latest
+    # The official Ollama image may require additional privileges or GPU configs for large models.
+    # If you prefer running Ollama on the host, set OLLAMA_URL in environment and remove this service.
+    ports:
+      - "11434:11434"
+    volumes:
+      - ollama_data:/root/.ollama
+    # On systems with GPU support you may need to set runtime or device flags; see Docker docs.
+
+volumes:
+  neo4j_data:
+  ollama_data:

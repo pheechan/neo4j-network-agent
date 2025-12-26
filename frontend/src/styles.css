@@ -1,0 +1,41 @@
+:root{
+  --bg:#0f1720;
+  --panel:#111827;
+  --muted:#9ca3af;
+  --accent:#7c3aed;
+  --user:#0ea5a9;
+}
+*{box-sizing:border-box}
+body,html,#root{height:100%;margin:0;font-family:Inter, system-ui, Arial;background:var(--bg);color:#e5e7eb}
+.app-root{display:flex;height:100vh}
+.sidebar{width:240px;background:linear-gradient(180deg,#0b1220,#0f1720);padding:16px;border-right:1px solid rgba(255,255,255,0.03)}
+.brand{font-weight:700;font-size:18px;margin-bottom:16px}
+.main{flex:1;display:flex;flex-direction:column}
+.chat-header{padding:20px;border-bottom:1px solid rgba(255,255,255,0.03);font-size:20px}
+.chat-window{flex:1;overflow:auto;padding:20px;display:flex;flex-direction:column;gap:12px}
+.composer{padding:12px;border-top:1px solid rgba(255,255,255,0.03);display:flex;gap:12px;align-items:flex-end}
+.composer textarea{flex:1;min-height:56px;padding:12px;border-radius:10px;background:#0b1220;border:1px solid rgba(255,255,255,0.03);color:#e5e7eb}
+.controls{display:flex;gap:8px}
+.send{background:var(--accent);color:white;border:none;padding:10px 16px;border-radius:10px;cursor:pointer}
+.bubble{max-width:75%;padding:12px;border-radius:12px}
+.bubble.user{background:linear-gradient(90deg, rgba(14,165,169,0.12), rgba(14,165,169,0.06));align-self:flex-end;border:1px solid rgba(14,165,169,0.12)}
+.bubble.assistant{background:#0b1220;border:1px solid rgba(255,255,255,0.03);align-self:flex-start}
+
+/* Thread list and sidebar */
+.thread-list{margin-top:8px}
+.threads-header{display:flex;justify-content:space-between;align-items:center;margin-bottom:8px}
+.thread-item{padding:8px;border-radius:8px;margin-bottom:6px;cursor:pointer;background:transparent;border:1px solid rgba(255,255,255,0.02)}
+.thread-item.active{background:linear-gradient(90deg, rgba(124,58,237,0.12), rgba(124,58,237,0.06));border:1px solid rgba(124,58,237,0.18)}
+.thread-item .title{font-weight:600}
+.thread-item .meta{font-size:12px;color:var(--muted)}
+
+.pinned{margin-top:16px}
+.chip{display:block;background:rgba(255,255,255,0.03);border:none;color:var(--muted);padding:6px 8px;border-radius:999px;margin-top:6px;text-align:left;cursor:pointer}
+
+/* Message cards */
+.message-card{max-width:75%;padding:12px;border-radius:12px;background:#071026;border:1px solid rgba(255,255,255,0.03)}
+.message-card.user{align-self:flex-end;background:linear-gradient(90deg, rgba(14,165,169,0.12), rgba(14,165,169,0.06));border:1px solid rgba(14,165,169,0.12)}
+.message-card .meta{display:flex;justify-content:space-between;font-size:12px;color:var(--muted);margin-bottom:8px}
+.message-card .content pre{white-space:pre-wrap;margin:0}
+.message-card .actions{margin-top:8px}
+.small{background:transparent;border:1px solid rgba(255,255,255,0.04);color:var(--muted);padding:4px 8px;border-radius:6px}
