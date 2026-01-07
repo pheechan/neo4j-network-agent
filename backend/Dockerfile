@@ -12,7 +12,6 @@ RUN pip install --no-cache-dir -r /app/requirements.txt
 COPY backend /app/backend
 COPY KG /app/KG
 COPY Graph /app/Graph
-COPY streamlit_app.py /app/streamlit_app.py
 
 ENV PYTHONUNBUFFERED=1
 

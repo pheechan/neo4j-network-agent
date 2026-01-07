@@ -1,0 +1,442 @@
+{
+  "version": "3.0.0",
+  "description": "Enhanced STelligence Network Graph Model with rich Person properties, full-text search, and cohort nodes",
+  "dataModel": {
+    "version": "3.0.0",
+    "graphSchemaRepresentation": {
+      "graphSchema": {
+        "nodeLabels": [
+          {
+            "$id": "nl:Person",
+            "token": "Person",
+            "properties": [
+              {
+                "$id": "p:person_id",
+                "token": "id",
+                "type": {"type": "integer"},
+                "nullable": true
+              },
+              {
+                "$id": "p:fullname",
+                "token": "ชื่อ-นามสกุล",
+                "type": {"type": "string"},
+                "nullable": false
+              },
+              {
+                "$id": "p:firstname",
+                "token": "ชื่อ",
+                "type": {"type": "string"},
+                "nullable": true
+              },
+              {
+                "$id": "p:lastname",
+                "token": "นามสกุล",
+                "type": {"type": "string"},
+                "nullable": true
+              },
+              {
+                "$id": "p:nickname",
+                "token": "ชื่อเล่น",
+                "type": {"type": "string"},
+                "nullable": true
+              },
+              {
+                "$id": "p:title",
+                "token": "คำนำหน้า",
+                "type": {"type": "string"},
+                "nullable": true
+              },
+              {
+                "$id": "p:search_text",
+                "token": "search_text",
+                "type": {"type": "string"},
+                "nullable": true,
+                "description": "Combined field for full-text search: fullname + nickname + position + agency"
+              }
+            ]
+          },
+          {
+            "$id": "nl:Position",
+            "token": "Position",
+            "properties": [
+              {
+                "$id": "p:position_name",
+                "token": "ตำแหน่ง",
+                "type": {"type": "string"},
+                "nullable": false
+              },
+              {
+                "$id": "p:remark",
+                "token": "Remark",
+                "type": {"type": "string"},
+                "nullable": true
+              }
+            ]
+          },
+          {
+            "$id": "nl:Agency",
+            "token": "Agency",
+            "properties": [
+              {
+                "$id": "p:agency_name",
+                "token": "หน่วยงาน",
+                "type": {"type": "string"},
+                "nullable": false
+              }
+            ]
+          },
+          {
+            "$id": "nl:Ministry",
+            "token": "Ministry",
+            "properties": [
+              {
+                "$id": "p:ministry_name",
+                "token": "กระทรวง",
+                "type": {"type": "string"},
+                "nullable": false
+              }
+            ]
+          },
+          {
+            "$id": "nl:Level",
+            "token": "Level",
+            "properties": [
+              {
+                "$id": "p:level_value",
+                "token": "Level",
+                "type": {"type": "integer"},
+                "nullable": true
+              }
+            ]
+          },
+          {
+            "$id": "nl:Network",
+            "token": "Network",
+            "properties": [
+              {
+                "$id": "p:network_name",
+                "token": "name",
+                "type": {"type": "string"},
+                "nullable": false
+              },
+              {
+                "$id": "p:network_type",
+                "token": "type",
+                "type": {"type": "string"},
+                "nullable": true,
+                "description": "connection | stelligence | cohort"
+              },
+              {
+                "$id": "p:network_desc",
+                "token": "description",
+                "type": {"type": "string"},
+                "nullable": true
+              }
+            ]
+          },
+          {
+            "$id": "nl:Cohort",
+            "token": "Cohort",
+            "properties": [
+              {
+                "$id": "p:cohort_name",
+                "token": "name",
+                "type": {"type": "string"},
+                "nullable": false,
+                "description": "e.g., NEXIS รุ่นที่ 1, วปอ. รุ่นที่ 68"
+              },
+              {
+                "$id": "p:cohort_type",
+                "token": "type",
+                "type": {"type": "string"},
+                "nullable": true,
+                "description": "e.g., NEXIS, วปอ., training_program"
+              },
+              {
+                "$id": "p:cohort_number",
+                "token": "batch_number",
+                "type": {"type": "integer"},
+                "nullable": true
+              },
+              {
+                "$id": "p:cohort_year",
+                "token": "year",
+                "type": {"type": "integer"},
+                "nullable": true
+              }
+            ]
+          },
+          {
+            "$id": "nl:Stelligence",
+            "token": "Stelligence",
+            "properties": [
+              {
+                "$id": "p:stel_name",
+                "token": "name",
+                "type": {"type": "string"},
+                "nullable": false,
+                "description": "Santisook, Por, Knot"
+              }
+            ]
+          }
+        ],
+        "relationshipTypes": [
+          {
+            "$id": "rt:work_as",
+            "token": "WORK_AS",
+            "properties": []
+          },
+          {
+            "$id": "rt:work_at",
+            "token": "WORK_AT",
+            "properties": []
+          },
+          {
+            "$id": "rt:under",
+            "token": "UNDER",
+            "properties": []
+          },
+          {
+            "$id": "rt:has_level",
+            "token": "HAS_LEVEL",
+            "properties": []
+          },
+          {
+            "$id": "rt:member_of",
+            "token": "MEMBER_OF",
+            "properties": [
+              {
+                "$id": "p:introduced_by",
+                "token": "introduced_by",
+                "type": {"type": "string"},
+                "nullable": true
+              }
+            ]
+          },
+          {
+            "$id": "rt:alumni_of",
+            "token": "ALUMNI_OF",
+            "properties": []
+          },
+          {
+            "$id": "rt:knows",
+            "token": "KNOWS",
+            "properties": [
+              {
+                "$id": "p:via",
+                "token": "via",
+                "type": {"type": "string"},
+                "nullable": true,
+                "description": "Network/context through which they know each other"
+              },
+              {
+                "$id": "p:strength",
+                "token": "strength",
+                "type": {"type": "integer"},
+                "nullable": true,
+                "description": "Connection strength 1-5"
+              }
+            ]
+          },
+          {
+            "$id": "rt:known_by",
+            "token": "KNOWN_BY",
+            "properties": [],
+            "description": "Stelligence member relationship"
+          },
+          {
+            "$id": "rt:part_of",
+            "token": "PART_OF",
+            "properties": [],
+            "description": "Agency is part of Ministry"
+          }
+        ],
+        "relationshipObjectTypes": [
+          {
+            "$id": "ro:1",
+            "from": {"$ref": "#nl:Person"},
+            "to": {"$ref": "#nl:Position"},
+            "type": {"$ref": "#rt:work_as"}
+          },
+          {
+            "$id": "ro:2",
+            "from": {"$ref": "#nl:Person"},
+            "to": {"$ref": "#nl:Agency"},
+            "type": {"$ref": "#rt:work_at"}
+          },
+          {
+            "$id": "ro:3",
+            "from": {"$ref": "#nl:Person"},
+            "to": {"$ref": "#nl:Ministry"},
+            "type": {"$ref": "#rt:under"}
+          },
+          {
+            "$id": "ro:4",
+            "from": {"$ref": "#nl:Person"},
+            "to": {"$ref": "#nl:Level"},
+            "type": {"$ref": "#rt:has_level"}
+          },
+          {
+            "$id": "ro:5",
+            "from": {"$ref": "#nl:Person"},
+            "to": {"$ref": "#nl:Network"},
+            "type": {"$ref": "#rt:member_of"}
+          },
+          {
+            "$id": "ro:6",
+            "from": {"$ref": "#nl:Person"},
+            "to": {"$ref": "#nl:Cohort"},
+            "type": {"$ref": "#rt:alumni_of"}
+          },
+          {
+            "$id": "ro:7",
+            "from": {"$ref": "#nl:Person"},
+            "to": {"$ref": "#nl:Person"},
+            "type": {"$ref": "#rt:knows"}
+          },
+          {
+            "$id": "ro:8",
+            "from": {"$ref": "#nl:Person"},
+            "to": {"$ref": "#nl:Stelligence"},
+            "type": {"$ref": "#rt:known_by"}
+          },
+          {
+            "$id": "ro:9",
+            "from": {"$ref": "#nl:Agency"},
+            "to": {"$ref": "#nl:Ministry"},
+            "type": {"$ref": "#rt:part_of"}
+          }
+        ],
+        "constraints": [
+          {
+            "$id": "c:1",
+            "constraintType": "uniqueness",
+            "entityType": "node",
+            "name": "Person_fullname_uniq",
+            "nodeLabel": {"$ref": "#nl:Person"},
+            "properties": [{"$ref": "#p:fullname"}]
+          },
+          {
+            "$id": "c:2",
+            "constraintType": "uniqueness",
+            "entityType": "node",
+            "name": "Position_name_uniq",
+            "nodeLabel": {"$ref": "#nl:Position"},
+            "properties": [{"$ref": "#p:position_name"}]
+          },
+          {
+            "$id": "c:3",
+            "constraintType": "uniqueness",
+            "entityType": "node",
+            "name": "Agency_name_uniq",
+            "nodeLabel": {"$ref": "#nl:Agency"},
+            "properties": [{"$ref": "#p:agency_name"}]
+          },
+          {
+            "$id": "c:4",
+            "constraintType": "uniqueness",
+            "entityType": "node",
+            "name": "Ministry_name_uniq",
+            "nodeLabel": {"$ref": "#nl:Ministry"},
+            "properties": [{"$ref": "#p:ministry_name"}]
+          },
+          {
+            "$id": "c:5",
+            "constraintType": "uniqueness",
+            "entityType": "node",
+            "name": "Network_name_uniq",
+            "nodeLabel": {"$ref": "#nl:Network"},
+            "properties": [{"$ref": "#p:network_name"}]
+          },
+          {
+            "$id": "c:6",
+            "constraintType": "uniqueness",
+            "entityType": "node",
+            "name": "Cohort_name_uniq",
+            "nodeLabel": {"$ref": "#nl:Cohort"},
+            "properties": [{"$ref": "#p:cohort_name"}]
+          }
+        ],
+        "indexes": [
+          {
+            "$id": "idx:1",
+            "indexType": "fulltext",
+            "name": "person_search",
+            "entityType": "node",
+            "nodeLabel": {"$ref": "#nl:Person"},
+            "properties": [
+              {"$ref": "#p:fullname"},
+              {"$ref": "#p:firstname"},
+              {"$ref": "#p:lastname"},
+              {"$ref": "#p:nickname"},
+              {"$ref": "#p:search_text"}
+            ]
+          }
+        ]
+      }
+    }
+  },
+  "csvMappingGuide": {
+    "description": "How to map your CSV columns to this model",
+    "mappings": {
+      "Person": {
+        "ลำดับ": "id",
+        "คำนำหน้า": "คำนำหน้า",
+        "ชื่อ-นามสกุล": "ชื่อ-นามสกุล",
+        "ชื่อ": "ชื่อ",
+        "นามสกุล": "นามสกุล",
+        "ชื่อเล่น": "ชื่อเล่น",
+        "search_text": "CONCAT(ชื่อ-นามสกุล, ' ', ชื่อเล่น, ' ', ตำแหน่ง, ' ', หน่วยงาน)"
+      },
+      "Position": {
+        "ตำแหน่ง": "ตำแหน่ง",
+        "Remark": "Remark"
+      },
+      "Agency": {
+        "หน่วยงาน": "หน่วยงาน"
+      },
+      "Ministry": {
+        "กระทรวง": "กระทรวง"
+      },
+      "Level": {
+        "Level": "Level"
+      },
+      "Network": {
+        "Connect by": "name",
+        "type": "'connection'"
+      },
+      "Cohort": {
+        "Associate": "name",
+        "example_values": ["NEXIS รุ่นที่ 1", "วปอ. รุ่นที่ 68"]
+      },
+      "Stelligence": {
+        "Stelligence": "name",
+        "allowed_values": ["Santisook", "Por", "Knot"]
+      }
+    },
+    "relationships": {
+      "Person -[:WORK_AS]-> Position": "Map ตำแหน่ง column",
+      "Person -[:WORK_AT]-> Agency": "Map หน่วยงาน column", 
+      "Person -[:UNDER]-> Ministry": "Map กระทรวง column",
+      "Person -[:HAS_LEVEL]-> Level": "Map Level column",
+      "Person -[:MEMBER_OF]-> Network": "Map Connect by column, with introduced_by from the actual person name",
+      "Person -[:ALUMNI_OF]-> Cohort": "Map Associate column",
+      "Person -[:KNOWN_BY]-> Stelligence": "Map Stelligence column (Santisook/Por/Knot)",
+      "Agency -[:PART_OF]-> Ministry": "Derive from Agency-Ministry combinations"
+    }
+  },
+  "cypherSetupQueries": {
+    "createFullTextIndex": "CREATE FULLTEXT INDEX person_search IF NOT EXISTS FOR (p:Person) ON EACH [p.`ชื่อ-นามสกุล`, p.`ชื่อ`, p.`นามสกุล`, p.`ชื่อเล่น`, p.search_text]",
+    "usage": "CALL db.index.fulltext.queryNodes('person_search', 'ประเสริฐ~') YIELD node, score RETURN node, score"
+  },
+  "improvements": [
+    "Person node now has firstName, lastName, nickname as separate properties for better search",
+    "Added search_text combined field for full-text indexing",
+    "Added title (คำนำหน้า) property to Person",
+    "Unified Network node type for all connection networks (OSK115, MABE, etc.)",
+    "Added Cohort node for training program batches (NEXIS, วปอ.)",
+    "Added Person-to-Person KNOWS relationship for direct connections",
+    "Agency now links to Ministry via PART_OF relationship",
+    "Included full-text search index definition"
+  ]
+}

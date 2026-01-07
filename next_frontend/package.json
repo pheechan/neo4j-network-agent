@@ -1,0 +1,15 @@
+{
+  "name": "neo4j-mask-nextjs",
+  "version": "0.1.0",
+  "private": true,
+  "scripts": {
+    "dev": "next dev -p 5173",
+    "build": "next build",
+    "start": "next start -p 5173"
+  },
+  "dependencies": {
+    "next": "13.5.8",
+    "react": "18.2.0",
+    "react-dom": "18.2.0"
+  }
+}
