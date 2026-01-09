@@ -2,7 +2,7 @@
 import time
 import json
 import asyncio
-from typing import List, Dict, Any
+from typing import List, Dict, Any, Optional
 
 from fastapi import FastAPI, HTTPException, Request
 from fastapi.responses import StreamingResponse
@@ -43,6 +43,16 @@ except Exception:
     except Exception:
         NetworkAgent = None
         get_network_agent = None
+
+# Import intelligent LLM-powered agent
+try:
+    from backend.intelligent_agent import IntelligentNetworkAgent, get_intelligent_agent
+except Exception:
+    try:
+        from intelligent_agent import IntelligentNetworkAgent, get_intelligent_agent
+    except Exception:
+        IntelligentNetworkAgent = None
+        get_intelligent_agent = None
 
 import requests
 import httpx
@@ -198,12 +208,15 @@ class ChatRequest(BaseModel):
     message: str
     use_streaming: bool = False
     use_cache: bool = True
+    session_id: Optional[str] = None  # Session ID for chat history
+    use_intelligent_agent: bool = True  # Use new LLM-powered agent
 
 
 class ChatResponse(BaseModel):
     answer: str
     context: str = ""
     debug: Dict[str, Any] = {}  # Debug metadata for UI
+    session_id: Optional[str] = None  # Return session ID for follow-up
 
 
 # Lightweight Aura proxy request for minimal frontend mask
@@ -373,7 +386,99 @@ def build_context(nodes: List[dict]) -> str:
     return "\n\n".join(pieces)
 
 
-SYSTEM_PROMPT = """คุณคือ STelligence Agent ช่วยวิเคราะห์เครือข่ายบุคคลภาครัฐไทย ตอบภาษาไทย กระชับ ใช้ข้อมูลจาก Context ที่ให้มา"""
+SYSTEM_PROMPT = """คุณคือ STelligence Agent ช่วยวิเคราะห์เครือข่ายบุคคลภาครัฐไทย ตอบภาษาไทย กระชับ ใช้ข้อมูลจาก Context ที่ให้มา
+
+คุณเป็นผู้เชี่ยวชาญด้าน:
+- เครือข่ายบุคคลในภาครัฐไทย
+- ความสัมพันธ์ระหว่างบุคคล หน่วยงาน กระทรวง
+- การหาเส้นทางเชื่อมต่อระหว่างบุคคล
+- เครือข่าย STelligence (Santisook, Por, Knot)
+- การค้นหาตามหน่วยงาน ตำแหน่ง รุ่น/cohort
+
+หากคำถามไม่เกี่ยวข้องกับเครือข่ายบุคคล หน่วยงาน หรือความสัมพันธ์ ให้ตอบว่า:
+"ขออภัย ฉันเป็น STelligence Network Agent ที่เชี่ยวชาญด้านการวิเคราะห์เครือข่ายบุคคลภาครัฐไทยเท่านั้น ไม่สามารถตอบคำถามนี้ได้ครับ/ค่ะ
+
+ลองถามเกี่ยวกับ:
+• หาเส้นทางจาก [ชื่อคนA] ไปหา [ชื่อคนB]
+• [ชื่อคน] รู้จักใครบ้าง
+• ใครทำงานที่ [กระทรวง/หน่วยงาน]
+• สมาชิก [Santisook/Por/Knot] มีใครบ้าง"
+
+ถ้าไม่มี Context ที่เกี่ยวข้อง ให้บอกว่าไม่พบข้อมูล"""
+
+
+def is_out_of_scope(message: str) -> bool:
+    """
+    Check if the message is out of scope for the network agent.
+    Returns True if the question is unrelated to network/person analysis.
+    """
+    message_lower = message.lower().strip()
+    
+    # Common out-of-scope topics
+    out_of_scope_keywords = [
+        # Food/Daily life
+        'breakfast', 'lunch', 'dinner', 'food', 'eat', 'eating', 'hungry',
+        'อาหาร', 'กิน', 'ข้าว', 'มื้อ', 'หิว', 'กินอะไร', 'ทานอะไร',
+        # Weather
+        'weather', 'rain', 'sunny', 'cloudy', 'temperature', 'hot', 'cold',
+        'อากาศ', 'ฝน', 'แดด', 'ร้อน', 'หนาว', 'อุณหภูมิ',
+        # Entertainment
+        'movie', 'music', 'song', 'game', 'play', 'watch', 'listen',
+        'หนัง', 'เพลง', 'เกม', 'ดู', 'ฟัง', 'เล่น',
+        # Personal/Casual
+        'how are you', 'what do you think', 'your opinion', 'your favorite',
+        'เป็นอย่างไร', 'สบายดี', 'ชอบอะไร', 'คิดอย่างไร', 'ความคิดเห็น',
+        # Sports
+        'football', 'soccer', 'basketball', 'sport', 
+        'ฟุตบอล', 'บาส', 'กีฬา',
+        # Travel/Places (non-work)
+        'vacation', 'holiday', 'travel', 'trip', 'tourist',
+        'เที่ยว', 'ท่องเที่ยว', 'วันหยุด', 'พักผ่อน',
+        # Jokes/Fun
+        'joke', 'funny', 'laugh', 'tell me a joke',
+        'ตลก', 'มุก', 'เล่าเรื่อง', 'หัวเราะ',
+        # Time/Date (general)
+        'what time', 'what day', 'current date',
+        'กี่โมง', 'วันนี้วันอะไร',
+        # Math/General knowledge
+        'calculate', 'math', 'add', 'subtract', 'multiply',
+        'คำนวณ', 'คณิต', 'บวก', 'ลบ', 'คูณ', 'หาร',
+        # Programming/Tech (unrelated)
+        'python code', 'javascript', 'write code', 'programming',
+        # Health
+        'sick', 'doctor', 'medicine', 'hospital',
+        'ป่วย', 'หมอ', 'ยา', 'โรงพยาบาล',
+    ]
+    
+    # Check if message contains any out-of-scope keywords
+    for keyword in out_of_scope_keywords:
+        if keyword in message_lower:
+            # Additional check: make sure it's not about a person named after these things
+            # by checking if there are network-related keywords too
+            network_keywords = [
+                'เครือข่าย', 'รู้จัก', 'ทำงาน', 'กระทรวง', 'หน่วยงาน', 'ตำแหน่ง',
+                'เส้นทาง', 'หาคน', 'santisook', 'por', 'knot', 'สมาชิก',
+                'path', 'network', 'connection', 'work at', 'ministry', 'organization',
+                # Network names
+                'osk', 'mabe', 'nexus', 'วปอ', 'นบส',
+                # Position-related
+                'รัฐมนตรี', 'รมต', 'อธิบดี', 'ปลัด', 'ผู้ว่า'
+            ]
+            has_network_context = any(nk in message_lower for nk in network_keywords)
+            if not has_network_context:
+                return True
+    
+    return False
+
+
+OUT_OF_SCOPE_RESPONSE = """ขออภัยครับ/ค่ะ ผม/ดิฉันเป็น **STelligence Network Agent** ที่เชี่ยวชาญด้านการวิเคราะห์เครือข่ายบุคคลภาครัฐไทยเท่านั้น ไม่สามารถตอบคำถามนี้ได้
+
+🔍 **ลองถามเกี่ยวกับ:**
+• หาเส้นทางจาก [ชื่อคนA] ไปหา [ชื่อคนB]
+• [ชื่อคน] รู้จักใครบ้าง  
+• ใครทำงานที่ [กระทรวง/หน่วยงาน]
+• สมาชิก Santisook / Por / Knot มีใครบ้าง
+• [ชื่อคน] ทำงานที่ไหน"""
 
 
 THAI_FOLLOWUP_SUGGESTIONS = {
@@ -677,10 +782,64 @@ def chat_endpoint(req: ChatRequest):
         "nodes_per_index": 6,
         "network_result_found": False,
         "llm_tokens": 0,
-        "processing_time_ms": 0
+        "processing_time_ms": 0,
+        "agent_type": "intelligent" if req.use_intelligent_agent else "legacy"
     }
 
-    # 1) First, try the smart Network Agent for relationship queries
+    # 0) Check for out-of-scope questions first (fast rejection)
+    if is_out_of_scope(message):
+        debug_info["intent_type"] = "out_of_scope"
+        debug_info["processing_time_ms"] = int((time.time() - start_time) * 1000)
+        return ChatResponse(
+            answer=OUT_OF_SCOPE_RESPONSE,
+            context="",
+            debug=debug_info,
+            session_id=req.session_id
+        )
+
+    # =========================================================================
+    # NEW: Use Intelligent LLM-powered Agent (default)
+    # This agent understands ANY query using LLM, not regex patterns
+    # =========================================================================
+    if req.use_intelligent_agent and get_intelligent_agent is not None:
+        try:
+            agent = get_intelligent_agent()
+            result = agent.execute_query(message, session_id=req.session_id)
+            
+            print(f"[DEBUG] Intelligent agent result: success={result.get('success')}, intent={result.get('intent', {}).get('intent_type')}")
+            
+            formatted = result.get("formatted", {})
+            answer = formatted.get("answer", "ไม่พบข้อมูล")
+            
+            # Build context string
+            context_parts = []
+            if result.get("intent"):
+                context_parts.append(f"Understanding: {result['intent'].get('natural_language_understanding', '')}")
+            if result.get("cypher"):
+                context_parts.append(f"Query: {result['cypher'][:200]}...")
+            
+            debug_info["intent_type"] = result.get("intent", {}).get("intent_type", "general")
+            debug_info["network_result_found"] = result.get("success", False)
+            debug_info["processing_time_ms"] = result.get("processing_time_ms", 0)
+            debug_info["cypher_generated"] = result.get("cypher", "")[:500] if result.get("cypher") else None
+            
+            return ChatResponse(
+                answer=answer,
+                context="\n".join(context_parts),
+                debug=debug_info,
+                session_id=result.get("session_id")
+            )
+            
+        except Exception as e:
+            print(f"[ERROR] Intelligent agent failed: {e}")
+            import traceback
+            traceback.print_exc()
+            # Fall through to legacy agent
+            debug_info["intelligent_agent_error"] = str(e)
+    
+    # =========================================================================
+    # LEGACY: Regex-based Network Agent (fallback)
+    # =========================================================================
     network_result = None
     network_context = ""
     network_intent_type = "general"  # Track intent type for follow-up suggestions
@@ -803,7 +962,8 @@ LIMIT 1
     # 6) For structured queries with pre-formatted data, SKIP LLM entirely - use direct answer
     # This reduces response time from ~150s to ~5s for path/network queries
     is_structured_query = network_intent_type in ["shortest_path", "network_members", "stelligence_network", 
-                                                   "organization_search", "cohort_search", "person_network"]
+                                                   "organization_search", "cohort_search", "person_network",
+                                                   "complex_query"]
     
     if is_structured_query and network_context:
         # Generate human-readable answer directly from structured data
@@ -822,7 +982,7 @@ LIMIT 1
     # Calculate processing time
     debug_info["processing_time_ms"] = int((time.time() - start_time) * 1000)
 
-    return ChatResponse(answer=answer, context=combined_context, debug=debug_info)
+    return ChatResponse(answer=answer, context=combined_context, debug=debug_info, session_id=req.session_id)
 
 
 def generate_structured_answer(smart_query_result: Dict, original_question: str) -> str:
@@ -943,6 +1103,61 @@ def generate_structured_answer(smart_query_result: Dict, original_question: str)
         
         if len(people) > 20:
             lines.append(f"  ...และอีก {len(people) - 20} คน")
+    
+    # Handle complex multi-condition queries
+    elif intent_type == "complex_query":
+        people = result.get("people", [])
+        count = result.get("count", len(people))
+        conditions = result.get("conditions", [])
+        
+        # Build condition description
+        cond_desc = []
+        for cond in conditions:
+            cond_type = cond.get("type", "")
+            if cond_type == "ministry":
+                cond_desc.append(f"ทำงานกระทรวง{cond.get('value', '')}")
+            elif cond_type == "cohort":
+                cohort_type = cond.get("cohort_type", "")
+                cohort_num = cond.get("cohort_number", "")
+                cond_desc.append(f"{cohort_type} รุ่น {cohort_num}" if cohort_num else cohort_type)
+            elif cond_type == "organization":
+                cond_desc.append(f"อยู่ใน {cond.get('value', '')}")
+            elif cond_type == "connected_to_stelligence":
+                cond_desc.append(f"รู้จักกับคนในเครือข่าย {cond.get('network', 'Stelligence')}")
+            elif cond_type == "connected_to_cabinet":
+                cond_desc.append("รู้จักกับคณะรัฐมนตรี")
+            elif cond_type == "connected_to_person":
+                cond_desc.append(f"รู้จักกับ {cond.get('person', '')}")
+        
+        lines.append(f"🔍 ค้นหา: {' และ '.join(cond_desc)}")
+        lines.append(f"👥 พบ {count} คน")
+        
+        if people:
+            lines.append("\nรายชื่อ:")
+            for person in people[:20]:
+                if isinstance(person, dict):
+                    name = person.get("name", "")
+                    pos = person.get("position", "")
+                    ministry = person.get("ministry", "")
+                    agency = person.get("agency", "")
+                    
+                    details = []
+                    if pos:
+                        details.append(pos)
+                    if ministry:
+                        details.append(ministry)
+                    elif agency:
+                        details.append(agency)
+                    
+                    detail_str = ", ".join(details) if details else ""
+                    lines.append(f"  • {name}" + (f" ({detail_str})" if detail_str else ""))
+                else:
+                    lines.append(f"  • {person}")
+            
+            if len(people) > 20:
+                lines.append(f"  ...และอีก {len(people) - 20} คน")
+        else:
+            lines.append("\n" + result.get("message", "ไม่พบข้อมูลที่ตรงตามเงื่อนไข"))
     
     # Default: return formatted result
     else:

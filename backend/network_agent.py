@@ -70,50 +70,308 @@ class NetworkAgent:
     
     def detect_query_intent(self, query: str) -> Dict[str, any]:
         """
-        Analyze the query to understand what the user wants:
-        - shortest_path: Find shortest connection between two people
-        - mutual_connections: Find common connections
-        - person_network: Get someone's network
+        Generic query intent detection that works with any question format.
+        Supports Thai and English queries for:
+        - shortest_path: Find connection between two people
+        - person_network: Get someone's connections/network
+        - mutual_connections: Find common connections between people
         - introduction: Who can introduce person A to person B
-        - network_members: Who is in a specific network (e.g., OSK115)
-        - company_network: Analyze company connections
+        - network_members: Who is in a specific network
+        - complex_query: Multi-condition queries (e.g. people in X who know Y)
+        - general: Free-form queries
         """
         print(f"[DEBUG detect_query_intent] Received query: {repr(query)}")
-        print(f"[DEBUG detect_query_intent] Query bytes: {query.encode('utf-8')}")
         
         query_lower = query.lower()
+        original_query = query
         
-        # Thai keywords to exclude from person extraction
-        thai_exclude_words = {
-            'เส้นทาง', 'จาก', 'ไป', 'ถึง', 'หา', 'ติดต่อ', 'เครือข่าย', 'ใคร', 'บ้าง', 'ที่', 'อยู่', 
-            'ทำงาน', 'สังกัด', 'รู้จัก', 'แนะนำ', 'ผ่าน', 'กระทรวง', 'กรม', 'สำนักงาน',
-            'มี', 'กี่', 'คน', 'แสดง', 'ดู', 'ช่วย', 'อยาก', 'ต้องการ', 'หาทาง'
+        # ============================================
+        # STEP 1: Define keywords and known names
+        # ============================================
+        
+        # Stelligence owners (define early for complex query check)
+        stelligence_keywords = {
+            "santisook": "Santisook", "สันติสุข": "Santisook",
+            "por": "Por", "พอ": "Por",
+            "knot": "Knot", "น็อต": "Knot",
+            "stelligence": "Stelligence"
         }
         
-        # Extract person names (capitalized words, Thai names, or nicknames)
-        # Exclude common question words
-        person_pattern = r'\b([A-Z][a-z]+(?: [A-Z][a-z]+)*)\b|([ก-๙]+(?:\s+[ก-๙]+)*)'
-        exclude_words = {'How', 'Can', 'Who', 'What', 'Where', 'When', 'Why', 'The', 'A', 'An', 'And', 'Or', 'But', 'Show', 'Tell', 'Find', 'Get', 'Help', 'Please', 'Me', 'My', 'I', 'You', 'Your', 'Their', 'His', 'Her', 'Between', 'To', 'From', 'With', 'Path', 'Shortest', 'Route'}
+        # ============================================
+        # STEP 1.5: Check for COMPLEX QUERIES first
+        # ============================================
+        # Complex queries have multiple conditions connected with "และ", "ที่", "กับ", etc.
         
-        persons_found = re.findall(person_pattern, query)
-        # Filter out Thai keywords and English exclude words
-        persons = []
-        for p in persons_found:
-            name = p[0] or p[1]
-            if name and name not in exclude_words and name not in thai_exclude_words:
-                persons.append(name)
+        complex_patterns = [
+            # Pattern: หาคนที่ทำงาน[ที่ไหน]ที่รู้จักกับ[ใคร]และรู้จักกับ[ใคร]
+            (r'หาคน(?:ที่)?ทำงาน(?:ที่)?(.+?)(?:ที่)?รู้จัก(?:กับ)?(.+)', 'org_with_connections'),
+            # Pattern: [cohort] มีใครบ้างที่รู้จักกับ [network/person]
+            (r'(.+?)\s*มีใครบ้าง(?:ที่)?รู้จัก(?:กับ)?(?:คนใน)?\s*(.+)', 'cohort_with_network'),
+            # Pattern: ใคร[ใน X]ที่รู้จัก[Y]
+            (r'ใคร(?:ใน|ที่อยู่ใน|ทำงาน(?:ที่)?)?(.+?)(?:ที่)?รู้จัก(?:กับ)?(.+)', 'who_in_x_knows_y'),
+            # Pattern: คน[ใน X]รู้จัก[Y]
+            (r'คน(?:ใน|ที่อยู่ใน|ทำงาน(?:ที่)?)?(.+?)(?:ที่)?รู้จัก(?:กับ)?(.+)', 'people_in_x_knows_y'),
+        ]
+        
+        for pattern, pattern_name in complex_patterns:
+            match = re.search(pattern, query, re.IGNORECASE)
+            if match:
+                group1 = match.group(1).strip()
+                group2 = match.group(2).strip()
+                print(f"[DEBUG] Complex pattern '{pattern_name}' matched: group1='{group1}', group2='{group2}'")
+                
+                # Parse the complex query
+                intent = {
+                    "type": "complex_query",
+                    "query": original_query,
+                    "conditions": []
+                }
+                
+                # Parse group1 (usually organization/cohort)
+                if 'กระทรวง' in group1:
+                    ministry_name = group1.replace('กระทรวง', '').strip()
+                    # Get just the ministry name before any trailing words
+                    ministry_name = re.sub(r'ที่$', '', ministry_name).strip()
+                    intent["conditions"].append({"type": "ministry", "value": ministry_name or group1})
+                elif re.search(r'วปอ\.?\s*(?:รุ่น(?:ที่)?\s*)?(\d+)?', group1.lower()):
+                    cohort_match = re.search(r'วปอ\.?\s*(?:รุ่น(?:ที่)?\s*)?(\d+)?', group1.lower())
+                    intent["conditions"].append({
+                        "type": "cohort", 
+                        "cohort_type": "วปอ.", 
+                        "cohort_number": cohort_match.group(1) if cohort_match.lastindex else None
+                    })
+                elif re.search(r'nexus\s*(?:ai\s*)?(?:รุ่น(?:ที่)?\s*)?(\d+)?', group1.lower()):
+                    cohort_match = re.search(r'nexus\s*(?:ai\s*)?(?:รุ่น(?:ที่)?\s*)?(\d+)?', group1.lower())
+                    intent["conditions"].append({
+                        "type": "cohort",
+                        "cohort_type": "NEXUS",
+                        "cohort_number": cohort_match.group(1) if cohort_match.lastindex else None
+                    })
+                else:
+                    intent["conditions"].append({"type": "organization", "value": group1})
+                
+                # Parse group2 (usually network/person to connect with)
+                # Split by "และ" or "กับ" for multiple connection targets
+                connection_targets = re.split(r'\s*(?:และ|กับ|or|and)\s*', group2)
+                for target in connection_targets:
+                    target = target.strip()
+                    if not target:
+                        continue
+                    
+                    # Check if it's a Stelligence network
+                    target_lower = target.lower().replace('คนใน', '').replace('เครือข่าย', '').strip()
+                    is_stelligence = any(sk in target_lower for sk in stelligence_keywords.keys())
+                    
+                    if is_stelligence:
+                        # Find which Stelligence network
+                        for sk, sv in stelligence_keywords.items():
+                            if sk in target_lower:
+                                intent["conditions"].append({"type": "connected_to_stelligence", "network": sv})
+                                break
+                    elif 'คณะรัฐมนตรี' in target or 'รัฐมนตรี' in target:
+                        intent["conditions"].append({"type": "connected_to_cabinet"})
+                    else:
+                        intent["conditions"].append({"type": "connected_to_person", "person": target})
+                
+                print(f"[DEBUG] Complex query parsed: {intent}")
+                return intent
+        
+        # Thai question/action words to strip from names
+        thai_question_words = [
+            'รู้จักใครบ้าง', 'รู้จักใคร', 'รู้จัก', 'ใครบ้าง', 'บ้าง', 
+            'มีใครบ้าง', 'ทำงานที่ไหน', 'อยู่ที่ไหน', 'เป็นใคร',
+            'คือใคร', 'ติดต่อได้อย่างไร', 'เครือข่ายของ', 'network',
+            'connections', 'หน่อย', 'ครับ', 'ค่ะ', 'นะ', 'ด้วย',
+            'ได้ไหม', 'ได้มั้ย', 'ช่วย', 'กรุณา', 'please',
+            'ที่รู้จักกับ', 'ที่รู้จัก', 'รู้จักกับ', 'มีใครบ้างที่'
+        ]
+        
+        # Path-related keywords
+        path_keywords_th = ['เส้นทาง', 'หาเส้นทาง', 'จาก', 'ไป', 'ถึง', 'ไปหา', 'หา', 'ติดต่อ']
+        path_keywords_en = ['path', 'route', 'from', 'to', 'connect', 'reach', 'find path', 'shortest']
+        
+        # Network query keywords  
+        network_keywords = ['รู้จัก', 'เครือข่าย', 'network', 'connections', 'knows', 'connected', 'contacts', 'friends']
+        
+        # (stelligence_keywords already defined above for complex query check)
+        
+        # Known person names (partial -> full name mapping)
+        known_names = {
+            # Thai names
+            "อนุทิน": "อนุทิน ชาญวีรกูล",
+            "อนุทิน ชาญวีรกูล": "อนุทิน ชาญวีรกูล",
+            "ชาญวีรกูล": "อนุทิน ชาญวีรกูล",
+            "เนติ": "เนติ วงกุหลาบ",
+            "เนติ วงกุหลาบ": "เนติ วงกุหลาบ",
+            "วงกุหลาบ": "เนติ วงกุหลาบ",
+            "อรอนุตตร์": "อรอนุตตร์ สุทธิ์เสงี่ยม",
+            "สุทธิ์เสงี่ยม": "อรอนุตตร์ สุทธิ์เสงี่ยม",
+            "ประเสริฐ": "ประเสริฐสิน",
+            # English transliterations
+            "anutin": "อนุทิน ชาญวีรกูล",
+            "charnvirakul": "อนุทิน ชาญวีรกูล",
+            "neti": "เนติ วงกุหลาบ",
+            "wongkulab": "เนติ วงกุหลาบ",
+        }
+        
+        # ============================================
+        # STEP 2: Clean query and extract names
+        # ============================================
+        
+        def clean_and_extract_name(text: str) -> str:
+            """Remove question words from text to get clean name"""
+            cleaned = text.strip()
+            # Remove Thai question words from end of string
+            for word in sorted(thai_question_words, key=len, reverse=True):
+                if cleaned.endswith(word):
+                    cleaned = cleaned[:-len(word)].strip()
+                if cleaned.startswith(word):
+                    cleaned = cleaned[len(word):].strip()
+            return cleaned.strip()
+        
+        def normalize_name(name: str) -> str:
+            """Normalize a name to its full form"""
+            if not name:
+                return name
+            name = clean_and_extract_name(name)
+            name_lower = name.lower()
+            
+            # Check Stelligence owners
+            if name_lower in stelligence_keywords:
+                return stelligence_keywords[name_lower]
+            
+            # Check known names (exact match)
+            if name in known_names:
+                return known_names[name]
+            if name_lower in known_names:
+                return known_names[name_lower]
+            
+            # Check partial matches - look for known names inside the text
+            for partial, full in known_names.items():
+                if partial in name or name in partial:
+                    return full
+            
+            return name
+        
+        def find_known_names_in_text(text: str) -> list:
+            """Find any known names that appear in the text"""
+            found = []
+            text_lower = text.lower()
+            
+            # Check for Stelligence owners
+            for keyword, name in stelligence_keywords.items():
+                if keyword in text_lower and name not in found:
+                    found.append(name)
+            
+            # Check for known Thai/English names (longer names first to avoid partial matches)
+            sorted_names = sorted(known_names.keys(), key=len, reverse=True)
+            for partial_name in sorted_names:
+                if partial_name in text and known_names[partial_name] not in found:
+                    found.append(known_names[partial_name])
+                elif partial_name.lower() in text_lower and known_names[partial_name] not in found:
+                    found.append(known_names[partial_name])
+            
+            return found
+        
+        def extract_thai_names(text: str) -> list:
+            """Extract Thai person names from text, filtering out question words"""
+            # FIRST: Try to find known names directly in the text
+            known_found = find_known_names_in_text(text)
+            if known_found:
+                print(f"[DEBUG] Found known names in text: {known_found}")
+                return known_found
+            
+            # If no known names found, try to extract by cleaning
+            cleaned = text
+            for word in sorted(thai_question_words, key=len, reverse=True):
+                cleaned = cleaned.replace(word, ' ')
+            
+            # Split by common separators
+            separators = ['จาก', 'ไป', 'ถึง', 'ไปหา', 'หา', 'และ', 'กับ', 'to', 'from', 'and']
+            parts = [cleaned]
+            for sep in separators:
+                new_parts = []
+                for part in parts:
+                    new_parts.extend(part.split(sep))
+                parts = new_parts
+            
+            # Filter and normalize names
+            names = []
+            for part in parts:
+                part = part.strip()
+                if len(part) >= 2:
+                    # Check if it's a known name or looks like a person name
+                    normalized = normalize_name(part)
+                    if normalized and len(normalized) >= 2:
+                        # Avoid duplicates
+                        if normalized not in names:
+                            names.append(normalized)
+            
+            return names
+        
+        # Extract names from query
+        extracted_names = extract_thai_names(query)
+        print(f"[DEBUG] Extracted names: {extracted_names}")
+        
+        # Also check for English capitalized names
+        english_name_pattern = r'\b([A-Z][a-z]+(?:\s+[A-Z][a-z]+)*)\b'
+        english_exclude = {'How', 'Can', 'Who', 'What', 'Where', 'When', 'Why', 'The', 'Find', 'Path', 'Show', 'Tell', 'Get', 'Please', 'From', 'To', 'And', 'Or', 'Between'}
+        english_names = [m for m in re.findall(english_name_pattern, query) if m not in english_exclude]
+        for name in english_names:
+            normalized = normalize_name(name)
+            if normalized not in extracted_names:
+                extracted_names.append(normalized)
+        
+        print(f"[DEBUG] Final extracted names: {extracted_names}")
+        
+        # ============================================
+        # STEP 3: Determine query intent
+        # ============================================
         
         intent = {
             "type": "general",
-            "persons": persons,
-            "query": query
+            "persons": extracted_names,
+            "query": original_query
         }
         
-        # Check for cohort/batch queries (NEXIS, วปอ., etc.)
+        # Check for PATH queries (between two people)
+        has_path_keywords = any(kw in query_lower for kw in path_keywords_th + path_keywords_en)
+        
+        if has_path_keywords and len(extracted_names) >= 2:
+            # Path query with two people
+            intent["type"] = "shortest_path"
+            intent["from_person"] = extracted_names[0]
+            intent["to_person"] = extracted_names[1]
+            print(f"[DEBUG] Detected PATH intent: {extracted_names[0]} -> {extracted_names[1]}")
+            return intent
+        
+        # Try specific path patterns for Thai
+        path_patterns = [
+            (r'(?:หา)?เส้นทาง\s*(?:จาก)?\s*(.+?)\s+(?:ไปหา|ไป\s*หา|ไป|ถึง)\s+(.+?)(?:\s*$)', 'th_path'),
+            (r'(.+?)\s+(?:ไปหา|ไป\s*หา)\s+(.+?)(?:\s*$)', 'th_goto'),
+            (r'จาก\s+(.+?)\s+(?:ไป|ถึง|ไปหา)\s+(.+?)(?:\s*$)', 'th_from'),
+            (r'(?:find\s+)?path\s+(?:from\s+)?(.+?)\s+to\s+(.+?)(?:\s*$)', 'en_path'),
+            (r'from\s+(.+?)\s+to\s+(.+?)(?:\s*$)', 'en_from'),
+        ]
+        
+        for pattern, pname in path_patterns:
+            match = re.search(pattern, query, re.IGNORECASE)
+            if match:
+                from_raw = clean_and_extract_name(match.group(1))
+                to_raw = clean_and_extract_name(match.group(2))
+                if len(from_raw) >= 2 and len(to_raw) >= 2:
+                    intent["type"] = "shortest_path"
+                    intent["from_person"] = normalize_name(from_raw)
+                    intent["to_person"] = normalize_name(to_raw)
+                    print(f"[DEBUG] Pattern '{pname}' matched: {intent['from_person']} -> {intent['to_person']}")
+                    return intent
+        
+        # Cohort/batch queries (Associate column - NEXUS AI, วปอ.) - CHECK BEFORE network keywords
+        # Note: Pattern handles Thai diacritics that may be stripped in some encodings
+        # รุ่น can appear as รุ่น, รุน, รน, รุ่นที่, etc.
         cohort_patterns = [
-            (r'nexis\s*(?:รุ่น(?:ที่)?\s*)?(\d+)?', 'NEXIS'),
-            (r'วปอ\.?\s*(?:รุ่น(?:ที่)?\s*)?(\d+)?', 'วปอ.'),
-            (r'(?:รุ่น|batch|cohort)\s*(?:ที่\s*)?(\d+)?', None),
+            (r'nexus\s*(?:ai\s*)?(?:ร[ุู]?[่้๊๋]?น(?:ท[ีิ]?[่้๊๋]?)?\s*)?(\d+)?', 'NEXUS'),
+            (r'วปอ\.?\s*(?:ร[ุู]?[่้๊๋]?น(?:ท[ีิ]?[่้๊๋]?)?\s*)?(\d+)?', 'วปอ.'),
         ]
         for pattern, cohort_type in cohort_patterns:
             match = re.search(pattern, query_lower)
@@ -121,187 +379,53 @@ class NetworkAgent:
                 intent["type"] = "cohort_search"
                 intent["cohort_type"] = cohort_type
                 intent["cohort_number"] = match.group(1) if match.lastindex else None
-                # Try to extract full cohort name from query
-                full_pattern = r'(nexis\s*รุ่น(?:ที่)?\s*\d+|วปอ\.?\s*รุ่น(?:ที่)?\s*\d+)'
-                full_match = re.search(full_pattern, query_lower)
-                if full_match:
-                    intent["cohort_name"] = full_match.group(1).strip()
+                print(f"[DEBUG] Detected COHORT intent: {cohort_type} batch {intent['cohort_number']}")
                 return intent
         
-        # Check for organization/ministry search (ใครทำงานกระทรวงพลังงาน)
-        org_keywords = ["ทำงาน", "อยู่ที่", "สังกัด", "ประจำ", "work at", "works at", "from", "in ministry", "at agency"]
-        ministry_keywords = ["กระทรวง", "ministry"]
-        agency_keywords = ["กรม", "สำนักงาน", "agency", "department", "office"]
+        # Check for NETWORK queries (single person)
+        has_network_keywords = any(kw in query_lower for kw in network_keywords)
         
-        if any(kw in query_lower for kw in org_keywords) or any(kw in query_lower for kw in ministry_keywords + agency_keywords):
-            # Try to extract organization name
-            # Ministry pattern: กระทรวง + name
-            ministry_match = re.search(r'กระทรวง\s*([ก-๙a-zA-Z\s]+?)(?:\s*$|\s*(?:บ้าง|มี|ใคร|กี่))', query)
-            if ministry_match:
-                intent["type"] = "organization_search"
-                intent["org_type"] = "ministry"
-                intent["org_name"] = ministry_match.group(1).strip()
-                return intent
-            
-            # Agency pattern: กรม/สำนักงาน + name  
-            agency_match = re.search(r'(?:กรม|สำนักงาน)\s*([ก-๙a-zA-Z\s]+?)(?:\s*$|\s*(?:บ้าง|มี|ใคร|กี่))', query)
-            if agency_match:
-                intent["type"] = "organization_search"
-                intent["org_type"] = "agency"
-                intent["org_name"] = agency_match.group(0).strip()
-                return intent
-        
-        # STELLIGENCE OWNER NAMES - used for both Stelligence network queries AND pathfinding
-        stelligence_keywords = {
-            "santisook": "Santisook",
-            "สันติสุข": "Santisook",
-            "por": "Por",
-            "พอ": "Por",
-            "knot": "Knot",
-            "น็อต": "Knot"
-        }
-        
-        # Check for shortest path / connection intent FIRST
-        # This must be checked BEFORE Stelligence network queries to handle "path from Santisook to X"
-        path_keywords = ["เส้นทาง", "จาก", "ไป", "ถึง", "shortest", "quickest", "fastest", "path", "route", "reach", "get to know", "connect to", "how can", "หา", "ติดต่อ"]
-        has_path_intent = any(keyword in query_lower for keyword in path_keywords)
-        
-        # For path queries, try to extract names using specific patterns
-        if has_path_intent:
-            # Pattern 1: "เส้นทางจาก X ไป Y" or "จาก X ไป Y" or "path from X to Y"
-            # Thai pattern: จาก <name> ไป/ถึง/หา <name>
-            # Also handle: X ไปหา Y, X ไป Y
-            thai_path_patterns = [
-                # Pattern: "เส้นทางจาก Por ไป อนุทิน" or "เส้นทางจาก X ไป Y"
-                r'เส้นทาง\s*(?:จาก)?\s*([ก-๙A-Za-z]+(?:\s+[ก-๙A-Za-z]+)?)\s*(?:ไป|ถึง|หา)\s*([ก-๙A-Za-z]+(?:\s+[ก-๙A-Za-z]+)?)',
-                # Pattern: "Santisook ไปหา อนุทิน ชาญวีรกูล" (name ไปหา name)
-                r'([ก-๙A-Za-z]+(?:\s+[ก-๙A-Za-z]+)?)\s+(?:ไปหา|ไป(?:\s*)หา)\s+([ก-๙A-Za-z]+(?:\s+[ก-๙A-Za-z]+)?)',
-                # Pattern: "จาก X ไป/ถึง/หา Y"
-                r'(?:จาก|from)\s*([ก-๙A-Za-z]+(?:\s+[ก-๙A-Za-z]+)?)\s*(?:ไป|ถึง|to|หา)\s*([ก-๙A-Za-z]+(?:\s+[ก-๙A-Za-z]+)?)',
-                # Pattern: "X ไป Y"
-                r'([ก-๙A-Za-z]+(?:\s+[ก-๙A-Za-z]+)?)\s+(?:ไป|ถึง)\s+([ก-๙A-Za-z]+(?:\s+[ก-๙A-Za-z]+)?)',
-            ]
-            
-            print(f"[DEBUG path patterns] Testing path patterns for: {query}")
-            
-            for pattern in thai_path_patterns:
-                print(f"[DEBUG path patterns] Trying pattern: {pattern}")
-                path_match = re.search(pattern, query, re.IGNORECASE)
-                if path_match:
-                    from_name = path_match.group(1).strip()
-                    to_name = path_match.group(2).strip()
-                    print(f"[DEBUG path patterns] Match found: from='{from_name}', to='{to_name}'")
-                    
-                    # Skip if to_name is a Thai keyword
-                    if to_name.lower() in thai_exclude_words or len(to_name) < 2:
-                        continue
-                    
-                    # Normalize Stelligence names
-                    from_normalized = stelligence_keywords.get(from_name.lower(), from_name)
-                    to_normalized = stelligence_keywords.get(to_name.lower(), to_name)
-                    
-                    intent["type"] = "shortest_path"
-                    intent["from_person"] = from_normalized
-                    intent["to_person"] = to_normalized
-                    print(f"[DEBUG] Path extracted: from={from_normalized}, to={to_normalized}")
-                    return intent
-        
-        # Fallback: if we have 2+ persons and path keywords
-        if has_path_intent and len(persons) >= 2:
-            intent["type"] = "shortest_path"
-            intent["from_person"] = persons[0]
-            intent["to_person"] = persons[1]
+        if has_network_keywords and len(extracted_names) >= 1:
+            intent["type"] = "person_network"
+            intent["person"] = extracted_names[0]
+            print(f"[DEBUG] Detected NETWORK intent for: {extracted_names[0]}")
             return intent
         
-        # Check if one name is Stelligence owner and there's another person
-        if has_path_intent:
-            stelligence_name = None
-            other_person = None
-            
-            for keyword, network_type in stelligence_keywords.items():
-                if keyword in query_lower:
-                    stelligence_name = network_type
-                    break
-            
-            if stelligence_name:
-                # Find the other person mentioned (not the Stelligence keyword)
-                for person in persons:
-                    if person.lower() not in stelligence_keywords and person.lower() != stelligence_name.lower():
-                        other_person = person
-                        break
-                
-                # Check for Thai name after ไป/to keywords
-                if not other_person:
-                    to_pattern = r'(?:ไป|ถึง|to|หา)\s*([ก-๙]+(?:\s*[ก-๙]+)*)'
-                    to_match = re.search(to_pattern, query)
-                    if to_match:
-                        other_person = to_match.group(1).strip()
-                
-                if other_person:
-                    intent["type"] = "shortest_path"
-                    # Determine direction based on from/to keywords
-                    if any(kw in query_lower for kw in ["จาก " + keyword for keyword in stelligence_keywords.keys()]):
-                        intent["from_person"] = stelligence_name
-                        intent["to_person"] = other_person
-                    else:
-                        # Default: from Stelligence owner to other person
-                        intent["from_person"] = stelligence_name
-                        intent["to_person"] = other_person
-                    return intent
-        
-        # Check for Stelligence network queries (only when NOT a path query)
-        for keyword, network_type in stelligence_keywords.items():
+        # Check for Stelligence owner network
+        for keyword, owner_name in stelligence_keywords.items():
             if keyword in query_lower:
+                # Check if it's a path query or network query
+                if has_path_keywords and len(extracted_names) >= 1:
+                    # Find the other person
+                    other_person = None
+                    for name in extracted_names:
+                        if name != owner_name:
+                            other_person = name
+                            break
+                    if other_person:
+                        intent["type"] = "shortest_path"
+                        intent["from_person"] = owner_name
+                        intent["to_person"] = other_person
+                        return intent
+                
+                # Default: show network
                 intent["type"] = "stelligence_network"
-                intent["network_type"] = network_type
+                intent["network_type"] = owner_name
                 return intent
         
-        # Check for network members query (ใครบ้างที่ connect by OSK115)
-        if "connect by" in query_lower or "เครือข่าย" in query_lower or "connect_by" in query_lower:
-            # Extract network name (OSK115, CSIL, etc.)
-            network_pattern = r'(?:by|เครือข่าย)\s*([A-Z0-9]+)'
-            network_match = re.search(network_pattern, query, re.IGNORECASE)
-            if network_match:
-                intent["type"] = "network_members"
-                intent["network"] = network_match.group(1)
-                return intent
+        # Organization search
+        ministry_match = re.search(r'กระทรวง\s*([ก-๙a-zA-Z\s]+?)(?:\s*$|\s*(?:บ้าง|มี|ใคร|กี่))', query)
+        if ministry_match:
+            intent["type"] = "organization_search"
+            intent["org_type"] = "ministry"
+            intent["org_name"] = ministry_match.group(1).strip()
+            return intent
         
-        # Shortest path / connection intent
-        # Thai: "เส้นทางจาก X ไป Y", "จาก X ถึง Y"
-        # English: "from X to Y", "path from X to Y"
-        if any(keyword in query_lower for keyword in ["เส้นทาง", "จาก", "ไป", "ถึง", "shortest", "quickest", "fastest", "path", "route", "reach", "get to know", "connect to", "how can"]):
-            if len(persons) >= 2:
-                intent["type"] = "shortest_path"
-                intent["from_person"] = persons[0]
-                intent["to_person"] = persons[1]
-                return intent
-        
-        # Introduction/connector query
-        # Thai: "ต้อง connect ผ่านใคร", "ใครสามารถแนะนำ"
-        # English: "who can introduce", "connect through who"
-        elif any(keyword in query_lower for keyword in ["ผ่านใคร", "แนะนำ", "introduce", "connect through", "who can help me meet"]):
-            if len(persons) >= 1:
-                intent["type"] = "introduction"
-                intent["from_person"] = "Me"  # User asking
-                intent["to_person"] = persons[0]
-                return intent
-        
-        # Mutual connections intent
-        elif any(keyword in query_lower for keyword in ["mutual", "common", "both know", "share", "in common", "รู้จักร่วมกัน"]):
-            if len(persons) >= 2:
-                intent["type"] = "mutual_connections"
-                intent["person1"] = persons[0]
-                intent["person2"] = persons[1]
-                return intent
-        
-        # Person's network intent  
-        # Thai: "X รู้จักใครบ้าง", "เครือข่ายของ X"
-        # English: "who does X know", "X's network"
-        elif any(keyword in query_lower for keyword in ["รู้จัก", "เครือข่าย", "network", "connections", "knows", "connected to", "friends", "colleagues", "contacts"]):
-            if len(persons) >= 1:
-                intent["type"] = "person_network"
-                intent["person"] = persons[0]
-                return intent
+        # If we have at least one person name, default to person_network
+        if len(extracted_names) >= 1:
+            intent["type"] = "person_network"
+            intent["person"] = extracted_names[0]
+            return intent
         
         return intent
     
@@ -329,26 +453,51 @@ class NetworkAgent:
         # Known person name mappings for common partial matches (Thai + English)
         # Store keys in lowercase and do case-insensitive lookup to avoid misses on different capitalizations
         known_names = {
-            # Thai names (kept as-is for matching but keys are lowered)
+            # Thai partial names to full names
             "อนุทิน": "อนุทิน ชาญวีรกูล",
             "อนทน": "อนุทิน ชาญวีรกูล",  # Handle encoding issues
+            "ชาญวีรกูล": "อนุทิน ชาญวีรกูล",
             "ประเสริฐ": "ประเสริฐสิน",
+            "เนติ": "เนติ วงกุหลาบ",
+            "วงกุหลาบ": "เนติ วงกุหลาบ",
+            "อรอนุตตร์": "อรอนุตตร์ สุทธิ์เสงี่ยม",
+            "สุทธิ์เสงี่ยม": "อรอนุตตร์ สุทธิ์เสงี่ยม",
             # English transliterations (lowercase keys)
             "anutin": "อนุทิน ชาญวีรกูล",
             "charnvirakul": "อนุทิน ชาญวีรกูล",
             "prasertsin": "ประเสริฐสิน",
+            "neti": "เนติ วงกุหลาบ",
+            "wongkulab": "เนติ วงกุหลาบ",
         }
 
         # Case-insensitive expansion: lower the incoming names for lookup
         to_lc = to_person.lower() if isinstance(to_person, str) else to_person
         from_lc = from_person.lower() if isinstance(from_person, str) else from_person
 
-        if isinstance(to_lc, str) and to_lc in known_names:
-            to_person = known_names[to_lc]
-            print(f"[DEBUG] Expanded to_person to: {to_person}")
-        if isinstance(from_lc, str) and from_lc in known_names:
-            from_person = known_names[from_lc]
-            print(f"[DEBUG] Expanded from_person to: {from_person}")
+        # Try exact match first, then partial match
+        if isinstance(to_lc, str):
+            if to_lc in known_names:
+                to_person = known_names[to_lc]
+                print(f"[DEBUG] Expanded to_person (exact): {to_person}")
+            else:
+                # Try partial matching
+                for partial, full in known_names.items():
+                    if partial in to_lc or to_lc in partial:
+                        to_person = full
+                        print(f"[DEBUG] Expanded to_person (partial): {to_person}")
+                        break
+                        
+        if isinstance(from_lc, str):
+            if from_lc in known_names:
+                from_person = known_names[from_lc]
+                print(f"[DEBUG] Expanded from_person (exact): {from_person}")
+            else:
+                # Try partial matching
+                for partial, full in known_names.items():
+                    if partial in from_lc or from_lc in partial:
+                        from_person = full
+                        print(f"[DEBUG] Expanded from_person (partial): {from_person}")
+                        break
             
         # Check if from_person is a Stelligence network owner
         stelligence_owners = {"santisook": "Santisook", "por": "Por", "knot": "Knot"}
@@ -807,7 +956,7 @@ class NetworkAgent:
             }
     
     def search_by_cohort(self, cohort_name: str = None, cohort_type: str = None, cohort_number: str = None) -> Dict:
-        """Search for people by cohort/batch. Uses retry logic."""
+        """Search for people by cohort/batch (from Associate column). Uses retry logic."""
         # Build search pattern
         if cohort_name:
             search_pattern = cohort_name.upper()
@@ -816,41 +965,48 @@ class NetworkAgent:
         elif cohort_type:
             search_pattern = cohort_type
         else:
-            search_pattern = "NEXIS"  # Default
-        
+            search_pattern = "NEXUS"  # Default
+
         return self._execute_with_retry(self._search_by_cohort_impl, search_pattern)
     
     def _search_by_cohort_impl(self, search_pattern: str) -> Dict:
         """Internal implementation of search_by_cohort.
         
         Uses the Associate relationship to find cohort members.
+        Aggregates across ALL matching Associate nodes (handles duplicates with different whitespace).
         """
         with self.driver.session() as session:
             
+            # First, get all matching persons across all Associate variations
             result = session.run("""
                 MATCH (p:Person)-[:associate_with]->(a:Associate)
-                WHERE toLower(a.Associate) CONTAINS toLower($pattern)
+                WHERE toLower(trim(a.Associate)) CONTAINS toLower(trim($pattern))
+                WITH DISTINCT p, trim(a.Associate) as cohort
                 OPTIONAL MATCH (p)-[:work_as]->(pos:Position)
                 OPTIONAL MATCH (p)-[:work_at]->(agency:Agency)
                 OPTIONAL MATCH (p)-[:under]->(ministry:Ministry)
-                RETURN a.Associate as cohort_name,
-                       collect(DISTINCT {
-                           name: p.`ชื่อ-นามสกุล`,
-                           position: pos.`ตำแหน่ง`,
-                           agency: agency.`หน่วยงาน`,
-                           ministry: ministry.`กระทรวง`
-                       }) as members,
-                       count(DISTINCT p) as member_count
+                WITH collect({
+                    name: p.`ชื่อ-นามสกุล`,
+                    position: pos.`ตำแหน่ง`,
+                    agency: agency.`หน่วยงาน`,
+                    ministry: ministry.`กระทรวง`
+                }) as all_members, 
+                collect(DISTINCT cohort)[0] as cohort_name
+                RETURN cohort_name, all_members, size(all_members) as member_count
             """, pattern=search_pattern)
             
             record = result.single()
             
             if record and record["member_count"] > 0:
+                # Deduplicate members by name, filter out empty/whitespace-only names
+                seen_names = set()
                 members_detailed = []
-                for m in record["members"]:
-                    if m.get("name"):
+                for m in record["all_members"]:
+                    name = m.get("name")
+                    if name and name.strip() and name.strip() not in seen_names:
+                        seen_names.add(name.strip())
                         members_detailed.append({
-                            "name": m["name"],
+                            "name": name.strip(),
                             "position": m.get("position"),
                             "agency": m.get("agency"),
                             "ministry": m.get("ministry")
@@ -858,7 +1014,7 @@ class NetworkAgent:
                 
                 return {
                     "found": True,
-                    "cohort": record["cohort_name"] or search_pattern,
+                    "cohort": (record["cohort_name"] or search_pattern).strip(),
                     "members": members_detailed,
                     "member_count": len(members_detailed)
                 }
@@ -990,6 +1146,12 @@ class NetworkAgent:
                 )
             }
         
+        elif intent["type"] == "complex_query":
+            return {
+                "intent": intent,
+                "result": self.execute_complex_query(intent["conditions"])
+            }
+        
         else:
             return {
                 "intent": intent,
@@ -1000,9 +1162,217 @@ class NetworkAgent:
                               "- 'ใครบ้างที่ connect by OSK115'\n" +
                               "- 'ใครรู้จัก Santisook/Por/Knot'\n" +
                               "- 'ใครทำงานกระทรวงพลังงาน'\n" +
-                              "- 'NEXIS รุ่น 1 มีใครบ้าง'"
+                              "- 'NEXUS AI รุ่น 1 มีใครบ้าง'\n" +
+                              "- 'วปอ. รุ่น 68 ใครรู้จัก Stelligence'"
                 }
             }
+    
+    def execute_complex_query(self, conditions: list) -> Dict:
+        """
+        Execute complex multi-condition queries.
+        Builds dynamic Cypher based on conditions.
+        """
+        return self._execute_with_retry(self._execute_complex_query_impl, conditions)
+    
+    def _execute_complex_query_impl(self, conditions: list) -> Dict:
+        """Internal implementation for complex queries.
+        
+        Uses a step-by-step approach: find people matching primary condition,
+        then filter by additional connection requirements.
+        """
+        
+        print(f"[DEBUG] Executing complex query with conditions: {conditions}")
+        
+        stelligence_rels = {"Santisook": "santisook_known", "Por": "por_known", "Knot": "knot_known", "Stelligence": None}
+        
+        # Separate primary conditions (what org/cohort person belongs to) 
+        # from connection conditions (who they should know)
+        primary_conditions = []
+        connection_conditions = []
+        
+        for cond in conditions:
+            cond_type = cond.get("type", "")
+            if cond_type in ["ministry", "cohort", "organization"]:
+                primary_conditions.append(cond)
+            else:
+                connection_conditions.append(cond)
+        
+        # Build query based on primary condition
+        if not primary_conditions:
+            # No primary condition, start with all people who match connections
+            base_query = "MATCH (p:Person)"
+            where_parts = []
+            params = {}
+        else:
+            # Use first primary condition as base
+            primary = primary_conditions[0]
+            ptype = primary.get("type")
+            params = {}
+            
+            if ptype == "ministry":
+                ministry_name = primary.get("value", "")
+                base_query = """
+                MATCH (p:Person)-[:under]->(m:Ministry)
+                WHERE m.`กระทรวง` CONTAINS $ministry_name
+                """
+                params["ministry_name"] = ministry_name
+                
+            elif ptype == "cohort":
+                cohort_type = primary.get("cohort_type", "")
+                cohort_number = primary.get("cohort_number")
+                # Check both Connect by and Associate nodes for cohort data
+                if cohort_number:
+                    base_query = """
+                    MATCH (p:Person)
+                    WHERE (p)-[:connect_by]->(:`Connect by` {`Connect by`: $cohort_full})
+                       OR (p)-[:associate_with]->(:Associate {Associate: $cohort_full})
+                       OR EXISTS {
+                           MATCH (p)-[:connect_by]->(cb:`Connect by`)
+                           WHERE cb.`Connect by` CONTAINS $cohort_type AND cb.`Connect by` CONTAINS $cohort_num
+                       }
+                       OR EXISTS {
+                           MATCH (p)-[:associate_with]->(a:Associate)
+                           WHERE a.Associate CONTAINS $cohort_type AND a.Associate CONTAINS $cohort_num
+                       }
+                    """
+                    # Build full cohort name like "NEXUS รุ่นที่ 1" or "วปอ. รุ่นที่ 68"
+                    cohort_full = f"{cohort_type} รุ่นที่ {cohort_number}"
+                    params["cohort_type"] = cohort_type
+                    params["cohort_num"] = str(cohort_number)
+                    params["cohort_full"] = cohort_full
+                else:
+                    base_query = """
+                    MATCH (p:Person)
+                    WHERE EXISTS {
+                           MATCH (p)-[:connect_by]->(cb:`Connect by`)
+                           WHERE cb.`Connect by` CONTAINS $cohort_type
+                       }
+                       OR EXISTS {
+                           MATCH (p)-[:associate_with]->(a:Associate)
+                           WHERE a.Associate CONTAINS $cohort_type
+                       }
+                    """
+                    params["cohort_type"] = cohort_type
+                    
+            elif ptype == "organization":
+                org_name = primary.get("value", "")
+                # Try both Agency and Connect by - some orgs like OSK115 are stored as Connect by
+                base_query = """
+                MATCH (p:Person)
+                WHERE (p)-[:work_at]->(:Agency {`หน่วยงาน`: $org_name})
+                   OR (p)-[:connect_by]->(:`Connect by` {`Connect by`: $org_name})
+                   OR EXISTS {
+                       MATCH (p)-[:work_at]->(org:Agency)
+                       WHERE org.`หน่วยงาน` CONTAINS $org_name
+                   }
+                   OR EXISTS {
+                       MATCH (p)-[:connect_by]->(cb:`Connect by`)
+                       WHERE cb.`Connect by` CONTAINS $org_name
+                   }
+                """
+                params["org_name"] = org_name
+            else:
+                base_query = "MATCH (p:Person)"
+        
+        # Add connection conditions as additional patterns
+        with_clause = "WITH DISTINCT p"
+        connection_matches = []
+        
+        for i, conn_cond in enumerate(connection_conditions):
+            conn_type = conn_cond.get("type", "")
+            
+            if conn_type == "connected_to_stelligence":
+                network = conn_cond.get("network", "Stelligence")
+                if network == "Stelligence":
+                    # Any Stelligence network - find people who are 1-3 hops from any Stelligence member
+                    connection_matches.append(f"""
+                    MATCH (p)-[*1..3]-(stel_member{i}:Person)
+                    WHERE (stel_member{i})<-[:santisook_known]-(:Santisook) 
+                       OR (stel_member{i})<-[:por_known]-(:Por) 
+                       OR (stel_member{i})<-[:knot_known]-(:Knot)
+                    WITH DISTINCT p
+                    """)
+                else:
+                    rel_type = stelligence_rels.get(network, "santisook_known")
+                    connection_matches.append(f"""
+                    MATCH (p)-[*1..3]-(stel_member{i}:Person)<-[:{rel_type}]-(:{network})
+                    WITH DISTINCT p
+                    """)
+                    
+            elif conn_type == "connected_to_cabinet":
+                connection_matches.append(f"""
+                MATCH (p)-[*1..3]-(cabinet{i}:Person)-[:work_as]->(cab_pos{i}:Position)
+                WHERE cab_pos{i}.`ตำแหน่ง` CONTAINS 'รัฐมนตรี'
+                WITH DISTINCT p
+                """)
+                
+            elif conn_type == "connected_to_person":
+                person_name = conn_cond.get("person", "")
+                param_name = f"target_person_{i}"
+                params[param_name] = person_name
+                connection_matches.append(f"""
+                MATCH (p)-[*1..3]-(target{i}:Person)
+                WHERE target{i}.`ชื่อ-นามสกุล` CONTAINS ${param_name}
+                WITH DISTINCT p
+                """)
+        
+        # Build final query
+        query = base_query + "\n" + with_clause + "\n"
+        for conn_match in connection_matches:
+            query += conn_match + "\n"
+        
+        # Final return with person details
+        query += """
+        OPTIONAL MATCH (p)-[:work_as]->(pos:Position)
+        OPTIONAL MATCH (p)-[:work_at]->(agency:Agency)
+        OPTIONAL MATCH (p)-[:under]->(ministry:Ministry)
+        WITH DISTINCT p, 
+             head(collect(DISTINCT pos.`ตำแหน่ง`)) as position,
+             head(collect(DISTINCT agency.`หน่วยงาน`)) as agency,
+             head(collect(DISTINCT ministry.`กระทรวง`)) as ministry
+        RETURN p.`ชื่อ-นามสกุล` as name,
+               position,
+               agency,
+               ministry
+        LIMIT 30
+        """
+        
+        print(f"[DEBUG] Complex query Cypher:\n{query}")
+        print(f"[DEBUG] Query params: {params}")
+        
+        # Execute
+        with self.driver.session() as session:
+            try:
+                result = session.run(query, **params)
+                
+                people = []
+                for record in result:
+                    if record["name"]:  # Only include if name exists
+                        people.append({
+                            "name": record["name"],
+                            "position": record["position"],
+                            "agency": record["agency"],
+                            "ministry": record["ministry"]
+                        })
+                
+                return {
+                    "found": len(people) > 0,
+                    "count": len(people),
+                    "people": people,
+                    "conditions": conditions,
+                    "message": f"พบ {len(people)} คนที่ตรงตามเงื่อนไข" if people else "ไม่พบข้อมูลที่ตรงตามเงื่อนไขที่กำหนด"
+                }
+            except Exception as e:
+                print(f"[ERROR] Complex query failed: {e}")
+                import traceback
+                traceback.print_exc()
+                return {
+                    "found": False,
+                    "count": 0,
+                    "people": [],
+                    "conditions": conditions,
+                    "message": f"เกิดข้อผิดพลาดในการค้นหา: {str(e)}"
+                }
 
 
 # Singleton instance
